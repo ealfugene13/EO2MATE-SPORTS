@@ -13,6 +13,17 @@ npm run dev
 
 Open the local Vite URL shown in the terminal. The sign-in screen opens a demo workspace when Supabase credentials are not configured.
 
+## Publish the UI with GitHub Pages
+
+This repository includes `.github/workflows/deploy-pages.yml` for the `EO2MATE-SPORTS` repository.
+
+1. Push the project files to the repository's `main` branch. If the default branch has a different name, update the workflow branch filter first.
+2. In GitHub, open **Settings → Pages** and choose **GitHub Actions** under **Build and deployment → Source**.
+3. Open **Actions** and wait for **Deploy basketball UI to GitHub Pages** to finish successfully.
+4. Open `https://ealfugene13.github.io/EO2MATE-SPORTS/`.
+
+The workflow builds only `apps/web`; it does not deploy the API or apply the Supabase migration. The Pages URL is a UI preview and uses sample data.
+
 ## Screens and interactions
 
 - Sign in with an MFA field and demo-mode notice.
