@@ -1,9 +1,10 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity, ArrowDownToLine, ArrowRight, Award, CalendarDays, Check, CheckCircle2,
   ChevronDown, CircleHelp, Clock3, Download, Ellipsis, Filter, Flag, Plus, Radio,
   Search, ShieldCheck, Sparkles, Trophy, Undo2, Users, UserRound, Wifi, WifiOff,
+  ArrowLeftRight, Pause, Play, X,
 } from 'lucide-react';
 
 type Row = { cells: string[]; status?: string };
@@ -143,44 +144,155 @@ export function Games() {
   </>;
 }
 
+type LiveTeam = 'Warriors' | 'Falcons';
+type LivePlayer = { name: string; number: string; position: string; onCourt: boolean; stats: Record<string, number> };
+type LiveEvent = { id: number; time: string; name: string; number: string; action: string; side: LiveTeam; points: number; playerName?: string; stat?: string; statDeltas?: Record<string, number>; substitution?: { outNumber: string; inNumber: string }; clockChange?: { remaining: number; period: string } };
+const startingPlayers: Record<LiveTeam, LivePlayer[]> = {
+  Warriors: [
+    { name: 'Alex Cruz', number: '23', position: 'PG', onCourt: true, stats: { PTS: 18, REB: 4, AST: 3, PF: 2 } },
+    { name: 'Ben Reyes', number: '08', position: 'SG', onCourt: true, stats: { PTS: 12, REB: 3, AST: 5 } },
+    { name: 'Dan Lim', number: '05', position: 'SF', onCourt: true, stats: { PTS: 9, REB: 5, AST: 2 } },
+    { name: 'Eli Lee', number: '11', position: 'PF', onCourt: true, stats: { PTS: 14, REB: 7, AST: 1 } },
+    { name: 'Finn Tan', number: '14', position: 'C', onCourt: true, stats: { PTS: 8, REB: 6, BLK: 1 } },
+    { name: 'Noah Lim', number: '02', position: 'G', onCourt: false, stats: { PTS: 4, AST: 1 } },
+    { name: 'Luis Tan', number: '19', position: 'F', onCourt: false, stats: { REB: 2 } },
+    { name: 'Kai Ong', number: '30', position: 'C', onCourt: false, stats: {} },
+  ],
+  Falcons: [
+    { name: 'Marco Yu', number: '17', position: 'PG', onCourt: true, stats: { PTS: 16, REB: 3, AST: 6 } },
+    { name: 'Paolo Dizon', number: '04', position: 'SG', onCourt: true, stats: { PTS: 11, REB: 2, AST: 3 } },
+    { name: 'Chris Santos', number: '21', position: 'SF', onCourt: true, stats: { PTS: 10, REB: 4, STL: 1 } },
+    { name: 'Jared Santos', number: '11', position: 'PF', onCourt: true, stats: { PTS: 15, REB: 8, BLK: 1 } },
+    { name: 'Nico Ong', number: '33', position: 'C', onCourt: true, stats: { PTS: 7, REB: 9 } },
+    { name: 'Rafi Cruz', number: '06', position: 'G', onCourt: false, stats: { PTS: 4, AST: 2 } },
+    { name: 'Ben Yu', number: '25', position: 'F', onCourt: false, stats: { REB: 2 } },
+    { name: 'Jules Tan', number: '09', position: 'C', onCourt: false, stats: {} },
+  ],
+};
+
 export function LiveGame() {
-  const [events, setEvents] = useState(initialEvents);
-  const [score, setScore] = useState({ Warriors: 68, Falcons: 65 });
-  const [selected, setSelected] = useState('Alex Cruz');
-  const [activeTeam, setActiveTeam] = useState<'Warriors'|'Falcons'>('Warriors');
+  const [events, setEvents] = useState<LiveEvent[]>(initialEvents.map(event => ({ ...event, side: event.side as LiveTeam })));
+  const [score, setScore] = useState<Record<LiveTeam, number>>({ Warriors: 68, Falcons: 65 });
+  const [teams, setTeams] = useState(startingPlayers);
+  const [selected, setSelected] = useState('23');
+  const [activeTeam, setActiveTeam] = useState<LiveTeam>('Warriors');
   const [period, setPeriod] = useState('Q4');
   const [clockRunning, setClockRunning] = useState(false);
-  const [seconds, setSeconds] = useState('06:42');
-  const [notice, setNotice] = useState('All changes are saved to this demo game.');
-  const players = activeTeam === 'Warriors' ? ['Alex Cruz','Ben Reyes','Dan Lim','Eli Lee','Finn Tan'] : ['Marco Yu','Paolo Dizon','Chris Santos','Jared Santos','Nico Ong'];
-  function record(action: string, points = 0) {
-    const playerData = selected.match(/^(.*?)(?:\s+#(\d+))?$/);
-    const playerName = selected.replace(/\s+#\d+$/, '');
-    const team = activeTeam;
-    const nextScore = { ...score, [team]: score[team] + points };
-    setScore(nextScore);
-    setEvents([{ id: Date.now(), time: seconds, name: playerName, number: playerData?.[2] ?? (team === 'Warriors' ? '23' : '17'), action, side: team, points }, ...events]);
-    setNotice(`${playerName} · ${action} recorded`);
+  const [remaining, setRemaining] = useState(402);
+  const [timeouts, setTimeouts] = useState<Record<LiveTeam, number>>({ Warriors: 2, Falcons: 1 });
+  const [teamFouls, setTeamFouls] = useState<Record<LiveTeam, number>>({ Warriors: 3, Falcons: 4 });
+  const [notice, setNotice] = useState('Demo mode · events are held in this browser preview.');
+  const [subOpen, setSubOpen] = useState(false);
+  const [subOut, setSubOut] = useState('23');
+  const [subIn, setSubIn] = useState('02');
+  const [clockOpen, setClockOpen] = useState(false);
+  const [clockInput, setClockInput] = useState('06:42');
+  const [clockReason, setClockReason] = useState('');
+  const player = teams[activeTeam].find(p => p.number === selected) ?? teams[activeTeam].find(p => p.onCourt)!;
+  const onCourt = teams[activeTeam].filter(p => p.onCourt);
+  const bench = teams[activeTeam].filter(p => !p.onCourt);
+  const displayTime = `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+
+  useEffect(() => {
+    if (!clockRunning || remaining <= 0) return;
+    const timer = window.setInterval(() => setRemaining(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [clockRunning, remaining]);
+  useEffect(() => { if (remaining === 0) setClockRunning(false); }, [remaining]);
+
+  function record(action: string, points = 0, stat = '') {
+    const chosen = teams[activeTeam].find(p => p.number === selected) ?? player;
+    const playerStats = { ...chosen.stats };
+    const statDeltas: Record<string, number> = stat ? { [stat]: 1 } : {};
+    if (stat === 'FGM') statDeltas.FGA = 1;
+    if (stat === '3PM') { statDeltas.FGA = 1; statDeltas.FGM = 1; statDeltas['3PA'] = 1; }
+    if (stat === '3PA') statDeltas.FGA = 1;
+    if (stat === 'FTM') statDeltas.FTA = 1;
+    if (points) statDeltas.PTS = points;
+    for (const [key, delta] of Object.entries(statDeltas)) playerStats[key] = (playerStats[key] ?? 0) + delta;
+    setTeams(current => ({ ...current, [activeTeam]: current[activeTeam].map(p => p.number === chosen.number ? { ...p, stats: playerStats } : p) }));
+    setScore(current => ({ ...current, [activeTeam]: current[activeTeam] + points }));
+    if (stat === 'PF') setTeamFouls(current => ({ ...current, [activeTeam]: current[activeTeam] + 1 }));
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: chosen.name, number: chosen.number, action, side: activeTeam, points, playerName: chosen.name, stat, statDeltas }, ...current]);
+    setNotice(`${chosen.name} · ${action} recorded`);
+  }
+  function substitute() {
+    if (subOut === subIn) return;
+    const outgoing = teams[activeTeam].find(p => p.number === subOut);
+    const incoming = teams[activeTeam].find(p => p.number === subIn);
+    if (!outgoing?.onCourt || incoming?.onCourt) return;
+    setTeams(current => ({ ...current, [activeTeam]: current[activeTeam].map(p => p.number === subOut ? { ...p, onCourt: false } : p.number === subIn ? { ...p, onCourt: true } : p) }));
+    setSelected(subIn);
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: `${incoming?.name} for ${outgoing.name}`, number: incoming?.number ?? '', action: 'Substitution', side: activeTeam, points: 0, substitution: { outNumber: subOut, inNumber: subIn } }, ...current]);
+    setNotice(`${incoming?.name} checks in for ${outgoing.name}`);
+    setSubOpen(false);
   }
   function undo() {
     const last = events[0];
     if (!last) return;
-    if (last.points) setScore(current => ({ ...current, [last.side]: current[last.side as keyof typeof current] - last.points }));
+    if (last.points) setScore(current => ({ ...current, [last.side]: current[last.side] - last.points }));
+    if (last.substitution) {
+      setTeams(current => ({ ...current, [last.side]: current[last.side].map(p => p.number === last.substitution!.outNumber ? { ...p, onCourt: true } : p.number === last.substitution!.inNumber ? { ...p, onCourt: false } : p) }));
+      setSelected(last.substitution.outNumber);
+    }
+    if (last.action === 'Team timeout') setTimeouts(current => ({ ...current, [last.side]: current[last.side] + 1 }));
+    if (last.clockChange) { setRemaining(last.clockChange.remaining); setPeriod(last.clockChange.period); setClockRunning(false); }
+    if (last.playerName && last.statDeltas) setTeams(current => ({ ...current, [last.side]: current[last.side].map(p => {
+      if (p.name !== last.playerName) return p;
+      const stats = { ...p.stats };
+      for (const [key, delta] of Object.entries(last.statDeltas!)) stats[key] = Math.max(0, (stats[key] ?? 0) - delta);
+      return { ...p, stats };
+    }) }));
+    if (last.stat === 'PF') setTeamFouls(current => ({ ...current, [last.side]: Math.max(0, current[last.side] - 1) }));
     setEvents(current => current.slice(1));
-    setNotice('Last event reversed. The history remains available for review.');
+    setNotice('Last event removed from this local preview.');
   }
+  function useTimeout() {
+    if (timeouts[activeTeam] <= 0) { setNotice(`${activeTeam} has no timeouts remaining.`); return; }
+    setTimeouts(current => ({ ...current, [activeTeam]: current[activeTeam] - 1 }));
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: activeTeam, number: '', action: 'Team timeout', side: activeTeam, points: 0 }, ...current]);
+    setNotice(`${activeTeam} timeout recorded`);
+    setClockRunning(false);
+  }
+  function advancePeriod() {
+    const next = period === 'Q4' ? 'OT' : period === 'OT' ? 'OT2' : `Q${Number(period.replace('Q', '')) + 1}`;
+    setPeriod(next); setRemaining(600); setClockRunning(false);
+    setEvents(current => [{ id: Date.now(), time: '10:00', name: 'Game clock', number: '', action: `Start of ${next}`, side: activeTeam, points: 0, clockChange: { remaining, period } }, ...current]);
+    setNotice(`Period advanced to ${next}; clock reset to 10:00`);
+  }
+  function saveClockAdjustment() {
+    const [minutes, seconds] = clockInput.split(':').map(Number);
+    if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || seconds > 59 || minutes > 99 || !clockReason.trim()) return;
+    const value = minutes * 60 + seconds;
+    setRemaining(value); setClockRunning(false); setClockOpen(false);
+    setEvents(current => [{ id: Date.now(), time: `${clockInput}`, name: 'Game clock', number: '', action: `Clock adjusted · ${clockReason.trim()}`, side: activeTeam, points: 0, clockChange: { remaining, period } }, ...current]);
+    setNotice(`Clock adjusted to ${clockInput}`); setClockReason('');
+  }
+  function switchTeam(team: LiveTeam) { setActiveTeam(team); setSelected(startingPlayers[team].find(p => p.onCourt)!.number); }
+
   return <>
     <PageTitle eyebrow="COURTSIDE · GAME CC-026" title="Live game console" subtitle="Pasig Warriors vs River Falcons · Community Court A" action={<><Link className="button" to="/games/review"><CheckCircle2 size={16}/> Review game</Link><Button><Ellipsis size={17}/></Button></>} />
-    <div className="console-status"><span><span className="pulse-dot"/> LIVE · {period}</span><span><Wifi size={14}/> Connected · last saved just now</span><span className="console-status-right">Assigned scorer: Staff 02</span></div>
+    <div className="console-status"><span><span className="pulse-dot"/> LIVE · {period}</span><span><WifiOff size={14}/> Demo preview · local state only</span><span className="console-status-right">Assigned scorer: Staff 02 · {clockRunning ? 'Clock running' : 'Clock stopped'}</span></div>
     <div className="score-console">
-      <div className="score-team"><span className="team-mark blue-mark large-mark">PW</span><span className="score-team-name">PASIG WARRIORS</span><strong>{score.Warriors}</strong><div className="score-meta"><span>TEAM FOULS <b>3</b></span><span>TIMEOUTS <b>2</b></span></div></div>
-      <div className="game-clock"><div className="clock-period"><button onClick={() => setPeriod(period === 'Q4' ? 'OT' : `Q${Number(period.replace('Q','')||0)+1}`)}>{period} <ChevronDown size={13}/></button><Pill tone="live"><span className="pulse-dot"/> IN PROGRESS</Pill></div><strong>{seconds}</strong><div className="clock-buttons"><Button variant="primary" onClick={() => setClockRunning(!clockRunning)}>{clockRunning ? 'Pause clock' : 'Start clock'}</Button><Button onClick={() => setSeconds('10:00')}>Reset</Button></div><small>{clockRunning ? 'Clock running' : 'Clock stopped'}</small></div>
-      <div className="score-team"><span className="team-mark orange-mark large-mark">RF</span><span className="score-team-name">RIVER FALCONS</span><strong>{score.Falcons}</strong><div className="score-meta"><span>TEAM FOULS <b>4</b></span><span>TIMEOUTS <b>1</b></span></div></div>
+      <div className="score-team"><span className="team-mark blue-mark large-mark">PW</span><span className="score-team-name">PASIG WARRIORS</span><strong>{score.Warriors}</strong><div className="score-meta"><span>TEAM FOULS <b>{teamFouls.Warriors}</b></span><span>TIMEOUTS <b>{timeouts.Warriors}</b></span></div></div>
+      <div className="game-clock"><div className="clock-period"><button onClick={advancePeriod}>{period} <ChevronDown size={13}/></button><Pill tone="live"><span className="pulse-dot"/> IN PROGRESS</Pill></div><strong>{displayTime}</strong><div className="clock-buttons"><Button variant="primary" onClick={() => { if (remaining === 0) { setNotice('The period clock is at 00:00. Advance the period to continue.'); return; } setClockRunning(!clockRunning); }}>{clockRunning ? <><Pause size={13}/> Pause</> : <><Play size={13}/> Start clock</>}</Button><Button onClick={() => { setRemaining(600); setClockRunning(false); }}>Reset</Button></div><small>{remaining === 0 ? 'Period ended' : clockRunning ? 'Clock running' : 'Clock stopped'} · tap period to advance</small></div>
+      <div className="score-team"><span className="team-mark orange-mark large-mark">RF</span><span className="score-team-name">RIVER FALCONS</span><strong>{score.Falcons}</strong><div className="score-meta"><span>TEAM FOULS <b>{teamFouls.Falcons}</b></span><span>TIMEOUTS <b>{timeouts.Falcons}</b></span></div></div>
     </div>
     <div className="scoring-layout">
-      <section className="panel scoring-panel"><div className="panel-heading"><div><h2>Record game event</h2><p>Select a team and player, then tap a stat.</p></div><div className="team-switch"><button className={activeTeam === 'Warriors' ? 'active' : ''} onClick={() => { setActiveTeam('Warriors'); setSelected('Alex Cruz'); }}>Warriors</button><button className={activeTeam === 'Falcons' ? 'active' : ''} onClick={() => { setActiveTeam('Falcons'); setSelected('Marco Yu'); }}>Falcons</button></div></div><div className="on-court-label">ON COURT <span>5 players</span></div><div className="player-chips">{players.map((player, i) => <button key={player} className={selected === player ? 'selected' : ''} onClick={() => setSelected(player)}><Avatar initials={player.split(' ').map(n=>n[0]).join('')} color={i % 2 ? 'sky' : 'peach'}/><span>{player}<small>#{['23','08','05','11','14'][i]}</small></span></button>)}</div><div className="stat-group"><div className="stat-group-label">SHOT</div><div className="stat-grid shot-grid"><button onClick={() => record('2PT made',2)}><b>+2</b><small>2PT made</small></button><button onClick={() => record('2PT missed')}><b>2PT</b><small>missed</small></button><button onClick={() => record('3PT made',3)}><b>+3</b><small>3PT made</small></button><button onClick={() => record('3PT missed')}><b>3PT</b><small>missed</small></button><button onClick={() => record('Free throw made',1)}><b>+1</b><small>FT made</small></button><button onClick={() => record('Free throw missed')}><b>FT</b><small>missed</small></button></div></div><div className="stat-group"><div className="stat-group-label">GAME STATS</div><div className="stat-grid"><button onClick={() => record('Offensive rebound')}><b>OREB</b><small>Off. rebound</small></button><button onClick={() => record('Defensive rebound')}><b>DREB</b><small>Def. rebound</small></button><button onClick={() => record('Assist')}><b>AST</b><small>Assist</small></button><button onClick={() => record('Steal')}><b>STL</b><small>Steal</small></button><button onClick={() => record('Block')}><b>BLK</b><small>Block</small></button><button onClick={() => record('Turnover')}><b>TO</b><small>Turnover</small></button><button onClick={() => record('Personal foul')}><b>FOUL</b><small>Personal foul</small></button><button onClick={() => setNotice('Substitution panel opened · choose player out and player in.') }><b>SUB</b><small>Substitution</small></button></div></div><div className="scoring-controls"><Button onClick={() => setNotice('Clock adjustment is ready. Select a period and enter a reason before saving.') }><Clock3 size={15}/> Adjust clock</Button><Button onClick={() => setNotice(`${activeTeam} timeout recorded.`)}>Team timeout</Button><Button onClick={() => setNotice(`Quarter control: ${period} is selected.`)}>End period</Button></div></section>
-      <section className="panel play-panel"><div className="panel-heading"><div><h2>Play-by-play</h2><p>Event log · newest first</p></div><Button onClick={undo}><Undo2 size={15}/> Undo last</Button></div><div className="sync-note"><CheckCircle2 size={15}/><span>{notice}</span><button className="icon-button"><Ellipsis size={17}/></button></div><div className="timeline">{events.map((event, i) => <div key={event.id} className="timeline-event"><span className={`timeline-marker ${event.points ? 'points' : ''}`}>{event.points ? '+' + event.points : '•'}</span><div className="timeline-copy"><b>{event.name} <span>#{event.number}</span></b><small>{event.action} · {event.side}</small></div><time>{event.time}</time><button className="icon-button" aria-label="Event options"><Ellipsis size={16}/></button>{i === 0 && <span className="new-event">NEW</span>}</div>)}</div><div className="panel-bottom"><Link to="/games/review" className="text-link">Open full box score <ArrowRight size={14}/></Link><span className="muted tiny">Event history is append-only</span></div></section>
+      <section className="panel scoring-panel">
+        <div className="panel-heading"><div><h2>Record game event</h2><p>Pick a player, then tap the action to add it to the box score.</p></div><div className="team-switch"><button className={activeTeam === 'Warriors' ? 'active' : ''} onClick={() => switchTeam('Warriors')}>Warriors</button><button className={activeTeam === 'Falcons' ? 'active' : ''} onClick={() => switchTeam('Falcons')}>Falcons</button></div></div>
+        <div className="on-court-label">ON COURT <span>{onCourt.length} players</span></div>
+        <div className="player-chips">{onCourt.map((p, i) => <button key={p.number} className={selected === p.number ? 'selected' : ''} onClick={() => setSelected(p.number)}><Avatar initials={p.name.split(' ').map(n => n[0]).join('')} color={i % 2 ? 'sky' : 'peach'}/><span>{p.name}<small>#{p.number} · {p.position}</small></span></button>)}</div>
+        <div className="selected-player"><div><b>#{player.number} {player.name}</b><small>{player.position} · this game</small></div><div>{['PTS','REB','AST','PF'].map(stat => <span key={stat}><b>{player.stats[stat] ?? 0}</b><small>{stat}</small></span>)}</div></div>
+        <div className="bench-row"><div className="on-court-label">BENCH <span>{bench.length} available</span></div><div className="player-chips">{bench.map(p => <button key={p.number} onClick={() => { setSubIn(p.number); setSubOut(onCourt[0]?.number ?? ''); setSubOpen(true); }}><Avatar initials={p.name.split(' ').map(n => n[0]).join('')} color="lavender"/><span>{p.name}<small>#{p.number} · {p.position}</small></span></button>)}<button className="sub-action" onClick={() => { setSubOut(onCourt[0]?.number ?? ''); setSubIn(bench[0]?.number ?? ''); setSubOpen(true); }}><ArrowLeftRight size={14}/><span>Substitute<small>Change lineup</small></span></button></div></div>
+        <div className="stat-group"><div className="stat-group-label">SHOOTING</div><div className="stat-grid shot-grid"><button onClick={() => record('2PT made', 2, 'FGM')}><b>+2</b><small>2PT made</small></button><button onClick={() => record('2PT missed', 0, 'FGA')}><b>2PT</b><small>missed</small></button><button onClick={() => record('3PT made', 3, '3PM')}><b>+3</b><small>3PT made</small></button><button onClick={() => record('3PT missed', 0, '3PA')}><b>3PT</b><small>missed</small></button><button onClick={() => record('Free throw made', 1, 'FTM')}><b>+1</b><small>FT made</small></button><button onClick={() => record('Free throw missed', 0, 'FTA')}><b>FT</b><small>missed</small></button></div></div>
+        <div className="stat-group"><div className="stat-group-label">PLAYER STATS</div><div className="stat-grid"><button onClick={() => record('Offensive rebound', 0, 'OREB')}><b>OREB</b><small>Off. rebound</small></button><button onClick={() => record('Defensive rebound', 0, 'DREB')}><b>DREB</b><small>Def. rebound</small></button><button onClick={() => record('Assist', 0, 'AST')}><b>AST</b><small>Assist</small></button><button onClick={() => record('Steal', 0, 'STL')}><b>STL</b><small>Steal</small></button><button onClick={() => record('Block', 0, 'BLK')}><b>BLK</b><small>Block</small></button><button onClick={() => record('Turnover', 0, 'TO')}><b>TO</b><small>Turnover</small></button><button onClick={() => record('Personal foul', 0, 'PF')}><b>FOUL</b><small>Personal foul</small></button><button onClick={() => { setSubOut(onCourt[0]?.number ?? ''); setSubIn(bench[0]?.number ?? ''); setSubOpen(true); }}><b>SUB</b><small>Substitution</small></button></div></div>
+        <div className="scoring-controls"><Button onClick={() => { setClockInput(displayTime); setClockOpen(true); }}><Clock3 size={15}/> Adjust clock</Button><Button onClick={useTimeout}>Team timeout</Button><Button onClick={advancePeriod}>End period <ArrowRight size={13}/></Button></div>
+      </section>
+      <section className="panel play-panel"><div className="panel-heading"><div><h2>Play-by-play</h2><p>Event log · newest first</p></div><Button onClick={undo}><Undo2 size={15}/> Undo last</Button></div><div className="sync-note"><CheckCircle2 size={15}/><span>{notice}</span><button className="icon-button"><Ellipsis size={17}/></button></div><div className="timeline">{events.map((event, i) => <div key={event.id} className="timeline-event"><span className={`timeline-marker ${event.points ? 'points' : ''}`}>{event.points ? '+' + event.points : '•'}</span><div className="timeline-copy"><b>{event.name} {event.number && <span>#{event.number}</span>}</b><small>{event.action} · {event.side}</small></div><time>{event.time}</time><button className="icon-button" aria-label="Event options"><Ellipsis size={16}/></button>{i === 0 && <span className="new-event">NEW</span>}</div>)}</div><div className="panel-bottom"><Link to="/games/review" className="text-link">Open full box score <ArrowRight size={14}/></Link><span className="muted tiny">Changes are tracked in the game log</span></div></section>
     </div>
+    {subOpen && <div className="modal-scrim" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setSubOpen(false); }}><section className="game-modal"><div className="modal-heading"><div><span className="eyebrow">{activeTeam.toUpperCase()} · LINEUP</span><h2>Make a substitution</h2><p>Choose the player checking out and the player entering.</p></div><button className="icon-button" aria-label="Close" onClick={() => setSubOpen(false)}><X size={17}/></button></div><div className="field-grid"><label>Player out<select value={subOut} onChange={e => setSubOut(e.target.value)}>{onCourt.map(p => <option key={p.number} value={p.number}>#{p.number} · {p.name}</option>)}</select></label><label>Player in<select value={subIn} onChange={e => setSubIn(e.target.value)}>{bench.map(p => <option key={p.number} value={p.number}>#{p.number} · {p.name}</option>)}</select></label></div>{!bench.length && <div className="form-error">No bench players are available.</div>}<div className="modal-footer"><Button onClick={() => setSubOpen(false)}>Cancel</Button><Button variant="primary" onClick={substitute}><ArrowLeftRight size={15}/> Confirm substitution</Button></div></section></div>}
+    {clockOpen && <div className="modal-scrim" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setClockOpen(false); }}><form className="game-modal" onSubmit={e => { e.preventDefault(); saveClockAdjustment(); }}><div className="modal-heading"><div><span className="eyebrow">GAME CC-026 · {period}</span><h2>Adjust game clock</h2><p>Clock adjustments are added to the game log.</p></div><button type="button" className="icon-button" aria-label="Close" onClick={() => setClockOpen(false)}><X size={17}/></button></div><div className="field-grid"><label>Time remaining<input type="text" value={clockInput} onChange={e => setClockInput(e.target.value)} placeholder="MM:SS" pattern="[0-9]{1,2}:[0-5][0-9]" required/></label><label>Reason<input value={clockReason} onChange={e => setClockReason(e.target.value)} placeholder="e.g. official correction" required/></label></div><div className="modal-footer"><Button onClick={() => setClockOpen(false)}>Cancel</Button><Button type="submit" variant="primary"><Check size={15}/> Save adjustment</Button></div></form></div>}
   </>;
 }
 

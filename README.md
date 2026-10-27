@@ -20,7 +20,7 @@ This repository includes `.github/workflows/deploy-pages.yml` for the `EO2MATE-S
 1. Push the project files to the repository's `main` branch. If the default branch has a different name, update the workflow branch filter first.
 2. In GitHub, open **Settings → Pages** and choose **GitHub Actions** under **Build and deployment → Source**.
 3. Open **Actions** and wait for **Deploy basketball UI to GitHub Pages** to finish successfully.
-4. Open `https://ealfugene13.github.io/EO2MATE-SPORTS/`.
+4. Open `https://sports.eo2mate.com/` after GitHub Pages reports the custom domain and HTTPS certificate as ready.
 
 The workflow builds only `apps/web`; it does not deploy the API or apply the Supabase migration. The Pages URL is a UI preview and uses sample data.
 
@@ -29,11 +29,11 @@ The workflow builds only `apps/web`; it does not deploy the API or apply the Sup
 - Sign in with an MFA field and demo-mode notice.
 - Organization dashboard with live games, upcoming games, review tasks, standings, and season leaders.
 - Competition and rule configuration, teams, player directory, and registration review.
-- Game schedule, live game console, play-by-play, event correction/undo, and result review/finalization.
+- Game schedule, live game console, five-player lineup and bench, substitutions, game clock and period controls, timeouts, player stat entry, play-by-play, event undo, and result review/finalization.
 - Standings, read-only public live scoreboard, announcements, staff access/audit view, and reports.
 - Responsive navigation and game-day layout for smaller screens.
 
-The live console demonstrates event entry and score updates in local component state. Sample data is fictional. The UI does not persist changes, authenticate users in demo mode, enforce permissions, or publish to a public site. Supabase integration and production security gates must be completed before using real league or player data.
+The live console demonstrates event entry and score updates in local component state. Its clock counts down while running; substitutions update the active lineup; and player actions update the selected player's preview box score. Sample data is fictional. The UI does not persist changes, authenticate users in demo mode, enforce permissions, or publish to a public site. Supabase integration and production security gates must be completed before using real league or player data.
 
 ## Stack
 

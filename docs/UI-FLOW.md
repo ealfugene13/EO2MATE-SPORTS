@@ -9,7 +9,7 @@ The UI prototype follows the initial design flow and keeps the courtside scorer 
 5. **Registration review:** eligibility status and guardian verification review, separated from the scorer workflow.
 6. **Schedule and matchup:** weekly schedule, date navigation, venue/status filters, matchups, scorer and reviewer assignment, and a scheduling-conflict preview.
 7. **Pre-game readiness:** available from the game schedule before enabling live scoring; the roster and game rules must be confirmed.
-8. **Live scoring:** team score, quarter and clock, on-court player selection, made/missed shots, rebounds, assists, steals, blocks, turnovers, fouls, substitution, and append-only play-by-play with undo/correction affordance.
+8. **Live scoring:** team score, running quarter clock, period controls, on-court and bench lineups, substitutions, player stat entry, team timeouts, clock adjustment with a reason, play-by-play, and undo for the latest score/stat/substitution/timeout/clock action. This package is a local-state UI preview; event persistence and audit-backed corrections still require the deployed API and database.
 9. **Review and finalize:** score reconciliation, sync state, box score, and result finalization.
 10. **League outputs:** standings, a read-only public scoreboard preview, announcements, audit/access view, and reports.
 
