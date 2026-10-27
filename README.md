@@ -29,7 +29,7 @@ The workflow builds only `apps/web`; it does not deploy the API or apply the Sup
 - Sign in with an MFA field and demo-mode notice.
 - Organization dashboard with live games, upcoming games, review tasks, standings, and season leaders.
 - Competition and rule configuration, teams, player directory, and registration review.
-- Game schedule, live game console, five-player lineup and bench, substitutions, game clock and period controls, timeouts, player stat entry, play-by-play, event undo, and result review/finalization.
+- Game schedule, live game console, five-player lineup and bench, substitutions, game clock and period controls, timeouts, player stat entry, pass-to-player assist validation after a made field goal, play-by-play, event undo, and result review/finalization.
 - Standings, read-only public live scoreboard, announcements, staff access/audit view, and reports.
 - Responsive navigation and game-day layout for smaller screens.
 
