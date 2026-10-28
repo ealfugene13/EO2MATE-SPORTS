@@ -9,7 +9,7 @@ export async function getWorkspace(): Promise<Workspace> {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new Error('Sign in with a league staff account to load organization data.');
   const { data, error } = await supabase.from('organization_members')
-    .select('organization_id,user_grp,user_role,organizations(id,name)')
+    .select('organization_id,user_grp,user_role,organizations!organization_members_organization_id_fkey(id,name)')
     .eq('user_id', user.id).eq('active', true).limit(1).maybeSingle();
   if (error) throw error;
   if (!data?.organization_id) throw new Error('Your account is not assigned to an active sports organization.');
@@ -30,7 +30,10 @@ export function useWorkspaceRows<T extends object>(table: string, columns: strin
         .eq('organization_id', org.id).order('created_at', { ascending: false });
       if (queryError) throw queryError;
       setRows((data ?? []) as unknown as T[]);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load organization data.'); }
+    } catch (e) {
+      const message=e instanceof Error?e.message:e&&typeof e==='object'&&'message' in e&&typeof e.message==='string'?e.message:'';
+      setError(message||'Unable to load organization data.');
+    }
     finally { setLoading(false); }
   }, [table, columns]);
   useEffect(() => { void reload(); }, [reload]);

@@ -9,7 +9,7 @@ const inviteSchema=z.object({organization_id:z.string().uuid(),email:z.string().
 app.post('/api/organization-members/invite',auth,async(req:any,res)=>{
   const parsed=inviteSchema.safeParse(req.body); if(!parsed.success)return res.status(422).json({error:'INVALID_INVITATION'});
   const {organization_id,email,role}=parsed.data;
-  const {data:membership,error:membershipError}=await admin.from('organization_members').select('user_grp,user_role,active,organizations(workflow_status)').eq('organization_id',organization_id).eq('user_id',req.user.id).maybeSingle();
+  const {data:membership,error:membershipError}=await admin.from('organization_members').select('user_grp,user_role,active,organizations!organization_members_organization_id_fkey(workflow_status)').eq('organization_id',organization_id).eq('user_id',req.user.id).maybeSingle();
   if(membershipError)return res.status(400).json({error:membershipError.message});
   if(!membership?.active||!['OWNER','ADMIN'].includes(membership.user_role))return res.status(403).json({error:'FORBIDDEN'});
   if((membership.organizations as any)?.workflow_status!=='SETUP')return res.status(409).json({error:'LEAGUE_SETUP_LOCKED'});
