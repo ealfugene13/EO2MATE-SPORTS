@@ -1,57 +1,58 @@
-# EO2MATE Sports — Basketball UI Prototype
+# EO2MATE Sports — Basketball League MVP
 
-Responsive basketball league operations UI based on the EO2MATE Sports initial design. It covers the staff journey from sign-in and league setup through roster approval, game-day scoring, result review, public scoreboard, standings, and reports.
+Responsive league operations app for organization setup, competitions and rules, teams, players, registrations, scheduling, game-day scoring, standings, reports, announcements, and staff access.
 
-## Run the UI
+## Run locally
 
 Requirements: Node.js 22 or later and npm.
 
 ```bash
 npm install
-npm run dev
+npm run dev --workspace @sports/web
 ```
 
-Open the local Vite URL shown in the terminal. The sign-in screen opens a demo workspace when Supabase credentials are not configured.
+Copy `.env.example` to the web app's `.env.local` and configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The browser uses the anon key and relies on database RLS. Do not put the service-role key in a `VITE_` variable.
 
-## Publish the UI with GitHub Pages
+The API is required for event scoring and staff invitations:
 
-This repository includes `.github/workflows/deploy-pages.yml` for the `EO2MATE-SPORTS` repository.
+```bash
+npm run dev --workspace @sports/api
+```
 
-1. Push the project files to the repository's `main` branch. If the default branch has a different name, update the workflow branch filter first.
-2. In GitHub, open **Settings → Pages** and choose **GitHub Actions** under **Build and deployment → Source**.
-3. Open **Actions** and wait for **Deploy basketball UI to GitHub Pages** to finish successfully.
-4. Open `https://sports.eo2mate.com/` after GitHub Pages reports the custom domain and HTTPS certificate as ready.
+Run the API with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `API_PORT`, and `WEB_ORIGIN` set in its server environment. Configure the web app's `VITE_API_URL` to the deployed API URL outside local development. The service-role key stays on the server.
 
-The workflow builds only `apps/web`; it does not deploy the API or apply the Supabase migration. The Pages URL is a UI preview and uses sample data.
+## Database setup
 
-## Screens and interactions
+For a new Supabase project, apply migrations in order:
 
-- Sign in with an MFA field and demo-mode notice.
-- Organization dashboard with live games, upcoming games, review tasks, standings, and season leaders.
-- Competition and rule configuration, teams, player directory, and registration review.
-- Game schedule, live game console, five-player lineup and bench, substitutions, game clock and period controls, timeouts, player stat entry, pass-to-player assist validation after a made field goal, play-by-play, event undo, and result review/finalization.
-- Parameterized basketball rules for half timeouts, late-Q4 timeout cap, timeout request/duration, foul limits and penalties, ejection thresholds, overtime, and running-clock stop periods.
-- Standings, read-only public live scoreboard, announcements, staff access/audit view, and reports.
-- Responsive navigation and game-day layout for smaller screens.
+1. `0001_initial.sql` — organizations, members, teams, players, games, event history, RLS, and scoring RPCs.
+2. `0002_parameterized_basketball_rules.sql` — versioned competition rules and per-game rule snapshots.
+3. `0003_navigation_data.sql` — registration and announcement records, organization settings, organization creation and registration RPCs, finalization, audit triggers, and narrow public scoreboard views.
 
-The live console demonstrates event entry and score updates in local component state. Its clock counts down while running; substitutions update the active lineup; and player actions update the selected player's preview box score. Sample data is fictional. The UI does not persist changes, authenticate users in demo mode, enforce permissions, or publish to a public site. Supabase integration and production security gates must be completed before using real league or player data.
+The first signed-in staff member can create the organization from **Organization setup**. The RPC assigns that account the `OWNER` role.
+
+## Navigation data paths
+
+- Dashboard, competition rules, teams, players, registrations, and schedule read organization-scoped Supabase rows.
+- Team and player records can be added, and active status can be changed.
+- Registration review supports creating a pending player registration, approving it, and returning it for changes.
+- Game scheduling writes team, venue, and tip-off selections to `games`.
+- Live scoring writes events through the authenticated API and the `record_game_event` database RPC. The database updates the score transactionally.
+- Result review finalizes live games through the `finalize_game` RPC. Database triggers record status changes in the audit log.
+- Standings and reports are calculated from saved results and events.
+- Public scoreboard views expose only enabled public live games and approved player names.
+- Announcements are saved for the organization. Email and push delivery are not wired yet.
+- Staff invitations use the authenticated API and Supabase Auth email invitation flow. The API checks organization role and records an audit event.
+
+The game-day scorer supports selecting a game, team, active roster player, event type, and saved period/clock. Automatic clock operation, timeout and foul enforcement, assist validation, and full box-score workflows still need server persistence before production use.
+
+## Publish the UI
+
+The GitHub Pages workflow builds `apps/web`; it does not deploy `apps/api`, configure secrets, or apply Supabase migrations. Deploy the API separately and configure GitHub Pages environment values before connecting the live UI. The public scoreboard stays empty until an organization enables its public portal and has a live game.
 
 ## Stack
 
-- React + TypeScript + Vite
-- Node.js + TypeScript API workspace
-- Supabase PostgreSQL/Auth/Realtime/Storage foundation
+- React, TypeScript, and Vite
+- Supabase Auth, PostgreSQL, RLS, and RPCs
+- Node.js API for privileged workflows
 - Lucide icons
-
-## Project layout
-
-- `apps/web`: UI
-- `apps/api`: API workspace
-- `supabase/migrations`: initial database migration
-- `docs`: architecture and UI flow notes
-
-## Configuration
-
-Copy `.env.example` to `apps/web/.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` only when connecting to a non-production test project. Never put the Supabase service-role key in the browser.
-
-Migration `0002_parameterized_basketball_rules.sql` adds versioned competition rule settings and snapshots the selected rule version onto newly created games. It is prepared for deployment but is not applied to a Supabase project by the GitHub Pages workflow. The current rules screen saves in browser storage until the authenticated API/database integration is completed.

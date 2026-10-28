@@ -48,21 +48,6 @@ export const DEFAULT_BASKETBALL_RULES: BasketballRules = {
   clockStopInFourthQuarter: true,
 };
 
-const STORAGE_KEY = 'eo2mate-sports-basketball-rules-v1';
-
 export function loadBasketballRules(): BasketballRules {
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored ? { ...DEFAULT_BASKETBALL_RULES, ...JSON.parse(stored) } : DEFAULT_BASKETBALL_RULES;
-  } catch {
-    return DEFAULT_BASKETBALL_RULES;
-  }
-}
-
-export function saveBasketballRules(rules: BasketballRules): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rules));
-  } catch {
-    // Keep the rules usable in the current screen if browser storage is unavailable.
-  }
+  return { ...DEFAULT_BASKETBALL_RULES };
 }
