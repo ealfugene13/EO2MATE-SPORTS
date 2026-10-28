@@ -29,7 +29,7 @@ export function useWorkspaceRows<T extends object>(table: string, columns: strin
       const { data, error: queryError } = await supabase.from(table).select(columns)
         .eq('organization_id', org.id).order('created_at', { ascending: false });
       if (queryError) throw queryError;
-      setRows((data ?? []) as T[]);
+      setRows((data ?? []) as unknown as T[]);
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load organization data.'); }
     finally { setLoading(false); }
   }, [table, columns]);

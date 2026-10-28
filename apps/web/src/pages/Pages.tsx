@@ -544,7 +544,7 @@ function LiveGamePrototype() {
 
 export function LiveGame() {
   type LiveDbGame={id:string;status:string;home_score:number;away_score:number;current_period:number;clock_ms:number;home_team_id:string;away_team_id:string;home_team?:{name:string};away_team?:{name:string}};
-  type RosterPlayer={id:string;team_id:string;jersey_number:number|null;position:string|null;status:string;players?:{first_name:string;last_name:string}|null};
+  type RosterPlayer={id:string;team_id:string;player_id:string;jersey_number:number|null;position:string|null;status:string;players?:{first_name:string;last_name:string}|null};
   type DbEvent={id:string;game_id:string;team_id:string;player_id:string|null;event_type:string;period:number;clock_ms:number;points:number;created_at:string};
   const games=useWorkspaceRows<LiveDbGame>('games','id,status,home_score,away_score,current_period,clock_ms,home_team_id,away_team_id,created_at,home_team:teams!games_home_team_id_fkey(name),away_team:teams!games_away_team_id_fkey(name)');
   const roster=useWorkspaceRows<RosterPlayer>('rosters','id,team_id,player_id,jersey_number,position,status,created_at,players(first_name,last_name)');
