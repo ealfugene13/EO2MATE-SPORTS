@@ -19,7 +19,7 @@ export default function App() {
   },[]);
   return <Routes>
     <Route path="/login" element={<Login />} />
-    <Route path="/public/live" element={<main className="workspace public-workspace"><div className="page-content"><PublicLive /></div></main>} />
+    <Route path="/public/live" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <main className="workspace public-workspace"><div className="page-content"><PublicLive /></div></main>) : <div className="empty-state">Checking sign-in…</div>} />
     <Route path="/" element={sessionReady ? (configured&&!signedIn?<Navigate to="/login" replace/>:<Shell />) : <div className="empty-state">Checking sign-in…</div>}>
       <Route index element={<Dashboard />} />
       <Route path="organization" element={<GenericPage name="Organization setup" />} />
