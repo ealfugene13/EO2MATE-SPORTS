@@ -4,7 +4,7 @@ import Login from './pages/Login';
 import Shell from './components/Shell';
 import { configured, supabase } from './lib/supabase';
 import {
-  Access, Announcements, Competition, Dashboard, GameReview, Games, GenericPage,
+  Access, Announcements, Competition, Dashboard, GameReview, Games, GenericPage, LeagueWorkflow,
   LiveGame, Players, PublicLive, Registrations, Reports, Standings, Teams,
 } from './pages/Pages';
 
@@ -23,6 +23,7 @@ export default function App() {
     <Route path="/" element={sessionReady ? (configured&&!signedIn?<Navigate to="/login" replace/>:<Shell />) : <div className="empty-state">Checking sign-in…</div>}>
       <Route index element={<Dashboard />} />
       <Route path="organization" element={<GenericPage name="Organization setup" />} />
+      <Route path="workflow" element={<LeagueWorkflow />} />
       <Route path="competition" element={<Competition />} />
       <Route path="teams" element={<Teams />} />
       <Route path="players" element={<Players />} />

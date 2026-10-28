@@ -10,6 +10,7 @@ import {
 const navigation = [
   { section: 'OVERVIEW', items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard }] },
   { section: 'LEAGUE MANAGEMENT', items: [
+    { to: '/workflow', label: 'League workflow', icon: ShieldCheck },
     { to: '/competition', label: 'Competition & rules', icon: Trophy },
     { to: '/teams', label: 'Teams & rosters', icon: Users },
     { to: '/players', label: 'Players', icon: UserRound },

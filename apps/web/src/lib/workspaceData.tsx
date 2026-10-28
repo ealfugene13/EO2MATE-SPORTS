@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, configured } from './supabase';
 
-export type Workspace = { id: string; name: string; role: string };
+export type Workspace = { id: string; name: string; user_grp: string; role: 'OWNER' | 'ADMIN' | 'STAFF' };
 type Row = Record<string, unknown>;
 
 export async function getWorkspace(): Promise<Workspace> {
@@ -9,12 +9,12 @@ export async function getWorkspace(): Promise<Workspace> {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new Error('Sign in with a league staff account to load organization data.');
   const { data, error } = await supabase.from('organization_members')
-    .select('organization_id,role,organizations(id,name)')
+    .select('organization_id,user_grp,user_role,organizations(id,name)')
     .eq('user_id', user.id).eq('active', true).limit(1).maybeSingle();
   if (error) throw error;
   if (!data?.organization_id) throw new Error('Your account is not assigned to an active sports organization.');
   const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
-  return { id: data.organization_id, name: org?.name ?? 'Sports organization', role: data.role };
+  return { id: data.organization_id, name: org?.name ?? 'Sports organization', user_grp: data.user_grp, role: data.user_role };
 }
 
 export function useWorkspaceRows<T extends object>(table: string, columns: string) {
