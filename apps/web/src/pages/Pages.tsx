@@ -75,6 +75,7 @@ export function Dashboard() {
 
 export function Competition() {
   const [saved, setSaved] = useState(false);
+  const [rulesNotice, setRulesNotice] = useState('');
   const [rulesError, setRulesError] = useState('');
   const [rules, setRules] = useState<BasketballRules | null>(null);
   type CompetitionRow = { id: string; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; seasons?:{name:string}|null };
@@ -106,7 +107,7 @@ export function Competition() {
     const invalid = (Object.entries(ruleBounds) as [NumberRuleKey, [number, number]][]).find(([key, [min, max]]) => !Number.isInteger(rules[key]) || rules[key] < min || rules[key] > max);
     if (invalid) { setRulesError(`Check ${invalid[0]}: use a whole number from ${invalid[1][0]} to ${invalid[1][1]}.`); setSaved(false); return; }
     if (!competitionName.trim()||!seasonName.trim()) { setRulesError('Enter both a competition name and season name before saving.'); return; }
-    setRulesError(''); setSaved(false);
+    setRulesError(''); setRulesNotice(''); setSaved(false);
     try {
       let seasonId=activeCompetition?.season_id??null;
       if(seasonId)await seasonsData.update(seasonId,{name:seasonName.trim()});else seasonId=await seasonsData.insert({name:seasonName.trim(),active:true});
@@ -115,9 +116,24 @@ export function Competition() {
       setSaved(true);
     } catch (e) { setRulesError(e instanceof Error ? e.message : 'Unable to save the competition rule set.'); }
   }
-  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Choose single or double round robin, or a single-elimination bracket. Basketball rule defaults come from the database." action={<div className="table-actions"><Button onClick={()=>{setCreatingCompetition(true);setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(null);setRulesError('');setSaved(false);}}><Plus size={15}/>New competition</Button><Button variant="primary" onClick={()=>void saveRuleSet()} disabled={competitionsData.loading||seasonsData.loading||!rules}><Check size={16}/> Save rule set</Button></div>} />
+  async function saveMyDefaults() {
+    if (!rules) { setRulesError('Load the basketball rule defaults from the database before saving.'); return; }
+    setRulesError(''); setRulesNotice('');
+    const { error } = await supabase.rpc('save_my_basketball_rule_settings', { p_rule_settings: rules });
+    if (error) setRulesError(error.message);
+    else setRulesNotice('Your personal defaults were saved. New competitions will start with these values.');
+  }
+  async function restoreSharedDefaults() {
+    setRulesError(''); setRulesNotice('');
+    const { data, error } = await supabase.rpc('restore_my_basketball_rule_settings');
+    if (error) { setRulesError(error.message); return; }
+    setRules(data as BasketballRules);
+    setRulesNotice('Your personal defaults were removed and restored from the shared database defaults. The current competition changes only if you click Save rule set.');
+  }
+  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Choose single or double round robin, or a single-elimination bracket. Basketball rule defaults come from the database." action={<div className="table-actions"><Button onClick={()=>{setCreatingCompetition(true);setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(null);setRulesError('');setRulesNotice('');setSaved(false);}}><Plus size={15}/>New competition</Button><Button variant="primary" onClick={()=>void saveRuleSet()} disabled={competitionsData.loading||seasonsData.loading||!rules}><Check size={16}/> Save rule set</Button></div>} />
     <DataState loading={competitionsData.loading||seasonsData.loading} error={competitionsData.error||seasonsData.error} onRetry={() => {void competitionsData.reload();void seasonsData.reload();}}/>
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
+    {rulesNotice && <div className="success-banner"><CheckCircle2 size={17}/>{rulesNotice}</div>}
     {rulesError && <div className="form-error rule-error">{rulesError}</div>}
     <div className="form-layout"><div className="form-main">
       <Panel title="Competition details"><div className="field-grid">{competitionsData.rows.length>0&&!creatingCompetition&&<label className="span-2">Competition<select value={activeCompetition?.id??''} onChange={e=>{setSelectedCompetitionId(e.target.value);setCreatingCompetition(false);}}>{competitionsData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}<label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
@@ -127,7 +143,7 @@ export function Competition() {
       <Panel title="Fouls and ejections"><div className="field-grid">{numberField('playerFoulLimit','Personal fouls before disqualification')}{numberField('teamFoulPenaltyAt','Team foul penalty starts at foul number')}{numberField('teamFoulFreeThrows','Free throws for each defensive team foul at penalty')}{numberField('technicalFreeThrows','Free throws for a technical foul')}{numberField('ejectionTechnicalLimit','Ejection at technical fouls')}{numberField('ejectionUnsportsmanlikeLimit','Ejection at unsportsmanlike fouls')}{numberField('ejectionMixedTechnicalLimit','Mixed ejection · technical fouls')}{numberField('ejectionMixedUnsportsmanlikeLimit','Mixed ejection · unsportsmanlike fouls')}</div></Panel>
       <Panel title="Overtime and game clock"><div className="field-grid">{numberField('overtimeTimeouts','Timeouts per team · each overtime')}{numberField('clockStopLastMinutes','Clock stops during final minutes')}{toggleField('carryFourthQuarterFoulsToOvertime','Carry Q4 team fouls into first overtime')}{toggleField('runningClockEnabled','Use running time')}{toggleField('clockStopInSecondQuarter','Stop clock in final minutes of Q2')}{toggleField('clockStopInFourthQuarter','Stop clock in final minutes of Q4')}</div><p className="rule-help">These values are saved with the competition and copied into each new game's rule snapshot.</p></Panel></>}
       <Panel title="Standings tie-breakers"><div className="rule-list"><div><span className="drag">1</span><b>Wins</b><Pill tone="neutral">1st</Pill></div><div><span className="drag">2</span><b>Head-to-head result</b><Pill tone="neutral">2nd</Pill></div><div><span className="drag">3</span><b>Point difference</b><Pill tone="neutral">3rd</Pill></div></div><small className="muted">Default tie-break order for this competition.</small></Panel>
-    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">{activeCompetition ? `VERSION ${activeCompetition.rule_version}` : 'DATABASE DEFAULTS'}</Pill><small>Rule defaults and competition settings are stored in Supabase.</small></div><div className="note-box"><CircleHelp size={16}/><span>New games copy the saved competition rules into a database snapshot.</span></div><button className="text-link full-link" onClick={() => { setRulesError(''); setRules(activeCompetition?.rule_settings ?? null); if (!activeCompetition) void getBasketballRuleDefaults().then(setRules).catch(error => setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.')); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div>
+    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">{activeCompetition ? `VERSION ${activeCompetition.rule_version}` : 'DATABASE DEFAULTS'}</Pill><small>Shared defaults and personal overrides are stored in Supabase.</small></div><div className="note-box"><CircleHelp size={16}/><span>New competitions use your personal defaults when saved, otherwise the shared database defaults.</span></div><div className="table-actions"><Button onClick={()=>void saveMyDefaults()} disabled={!rules}>Save as my defaults</Button><Button onClick={()=>void restoreSharedDefaults()} disabled={!rules}>Restore shared defaults</Button></div><button className="text-link full-link" onClick={() => { setRulesError(''); setRules(activeCompetition?.rule_settings ?? null); if (!activeCompetition) void getBasketballRuleDefaults().then(setRules).catch(error => setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.')); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div>
   </>;
 }
 
