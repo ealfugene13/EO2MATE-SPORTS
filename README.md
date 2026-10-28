@@ -30,6 +30,7 @@ The workflow builds only `apps/web`; it does not deploy the API or apply the Sup
 - Organization dashboard with live games, upcoming games, review tasks, standings, and season leaders.
 - Competition and rule configuration, teams, player directory, and registration review.
 - Game schedule, live game console, five-player lineup and bench, substitutions, game clock and period controls, timeouts, player stat entry, pass-to-player assist validation after a made field goal, play-by-play, event undo, and result review/finalization.
+- Parameterized basketball rules for half timeouts, late-Q4 timeout cap, timeout request/duration, foul limits and penalties, ejection thresholds, overtime, and running-clock stop periods.
 - Standings, read-only public live scoreboard, announcements, staff access/audit view, and reports.
 - Responsive navigation and game-day layout for smaller screens.
 
@@ -52,3 +53,5 @@ The live console demonstrates event entry and score updates in local component s
 ## Configuration
 
 Copy `.env.example` to `apps/web/.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` only when connecting to a non-production test project. Never put the Supabase service-role key in the browser.
+
+Migration `0002_parameterized_basketball_rules.sql` adds versioned competition rule settings and snapshots the selected rule version onto newly created games. It is prepared for deployment but is not applied to a Supabase project by the GitHub Pages workflow. The current rules screen saves in browser storage until the authenticated API/database integration is completed.

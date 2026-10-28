@@ -4,12 +4,12 @@ The UI prototype follows the initial design flow and keeps the courtside scorer 
 
 1. **Sign in:** staff account, MFA field, and organization context.
 2. **Organization overview:** today's games, live games, pending registration and result review, standings snapshot, and season leaders.
-3. **Competition setup:** season, division, configured basketball rules, tie-break order, and saved rule version.
+3. **Competition setup:** season, division, parameterized timeout, foul, ejection, overtime, and clock rules, tie-break order, and saved rule version. The UI stores settings in browser storage; database migration `0002_parameterized_basketball_rules.sql` adds versioned competition settings and snapshots them onto new games.
 4. **Team and player setup:** team directory, roster state, player sports profile, and public-profile visibility.
 5. **Registration review:** eligibility status and guardian verification review, separated from the scorer workflow.
 6. **Schedule and matchup:** weekly schedule, date navigation, venue/status filters, matchups, scorer and reviewer assignment, and a scheduling-conflict preview.
 7. **Pre-game readiness:** available from the game schedule before enabling live scoring; the roster and game rules must be confirmed.
-8. **Live scoring:** team score, running quarter clock, period controls, on-court and bench lineups, substitutions, player stat entry, team timeouts, clock adjustment with a reason, and play-by-play. A recorded pass to a teammate prompts the scorer to validate an assist if that receiver scores on the next made field goal. Undo is available for the latest score/stat/substitution/timeout/clock action. This package is a local-state UI preview; event persistence and audit-backed corrections still require the deployed API and database.
+8. **Live scoring:** team score, running quarter clock, period controls, on-court and bench lineups, substitutions, player stat entry, configured timeout/foul/ejection behavior, clock adjustment with a reason, and play-by-play. A recorded pass to a teammate prompts the scorer to validate an assist if that receiver scores on the next made field goal. Undo is available for recent events. This package is a local-state UI preview; event persistence and audit-backed corrections still require the deployed API and database.
 9. **Review and finalize:** score reconciliation, sync state, box score, and result finalization.
 10. **League outputs:** standings, a read-only public scoreboard preview, announcements, audit/access view, and reports.
 

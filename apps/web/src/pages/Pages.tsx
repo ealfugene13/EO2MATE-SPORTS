@@ -6,8 +6,20 @@ import {
   Search, ShieldCheck, Sparkles, Trophy, Undo2, Users, UserRound, Wifi, WifiOff,
   ArrowLeftRight, Pause, Play, X,
 } from 'lucide-react';
+import { loadBasketballRules, saveBasketballRules, type BasketballRules } from '../lib/basketballRules';
 
 type Row = { cells: string[]; status?: string };
+type NumberRuleKey = { [K in keyof BasketballRules]: BasketballRules[K] extends number ? K : never }[keyof BasketballRules];
+type BooleanRuleKey = { [K in keyof BasketballRules]: BasketballRules[K] extends boolean ? K : never }[keyof BasketballRules];
+const ruleBounds: Record<NumberRuleKey, [number, number]> = {
+  periodLengthMinutes: [1, 20], firstHalfTimeouts: [0, 10], secondHalfTimeouts: [0, 10],
+  fourthQuarterTimeoutRestrictionMinutes: [0, 10], finalTwoMinuteTimeoutMax: [0, 10],
+  timeoutDurationSeconds: [1, 300], playerFoulLimit: [1, 10], teamFoulPenaltyAt: [1, 10],
+  teamFoulFreeThrows: [0, 5], technicalFreeThrows: [0, 5], ejectionTechnicalLimit: [1, 10],
+  ejectionUnsportsmanlikeLimit: [1, 10], ejectionMixedTechnicalLimit: [1, 10],
+  ejectionMixedUnsportsmanlikeLimit: [1, 10], overtimeMinutes: [1, 20], overtimeTimeouts: [0, 10],
+  clockStopLastMinutes: [0, 10],
+};
 const initialEvents = [
   { id: 1, time: '06:42', name: 'Alex Cruz', number: '23', action: '2PT made', side: 'Warriors', points: 2 },
   { id: 2, time: '06:51', name: 'Ben Reyes', number: '08', action: 'Steal', side: 'Warriors', points: 0 },
@@ -18,8 +30,8 @@ const initialEvents = [
 function PageTitle({ eyebrow, title, subtitle, action }: { eyebrow?: string; title: string; subtitle: string; action?: ReactNode }) {
   return <div className="page-title"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1><p>{subtitle}</p></div>{action && <div className="title-action">{action}</div>}</div>;
 }
-function Button({ children, variant = 'secondary', onClick, className = '', type = 'button' }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost'; onClick?: () => void; className?: string; type?: 'button' | 'submit' }) {
-  return <button type={type} className={`button ${variant} ${className}`} onClick={onClick}>{children}</button>;
+function Button({ children, variant = 'secondary', onClick, className = '', type = 'button', disabled = false }: { children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost'; onClick?: () => void; className?: string; type?: 'button' | 'submit'; disabled?: boolean }) {
+  return <button type={type} className={`button ${variant} ${className}`} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) { return <span className={`pill ${tone}`}>{children}</span>; }
 function Metric({ label, value, note, icon: Icon, tone = 'blue' }: { label: string; value: string; note: string; icon: typeof Activity; tone?: string }) {
@@ -74,9 +86,26 @@ export function Dashboard() {
 
 export function Competition() {
   const [saved, setSaved] = useState(false);
-  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Configure a season and keep a versioned record of the rules used." action={<Button variant="primary" onClick={() => setSaved(true)}><Check size={16}/> Save rule version</Button>} />
-    {saved && <div className="success-banner"><CheckCircle2 size={17}/> Rule set saved as Senior-2026-v2. New games will use this version.</div>}
-    <div className="form-layout"><div className="form-main"><Panel title="Competition details"><div className="field-grid"><label>Season name<input defaultValue="Community Cup 2026"/></label><label>Division<select defaultValue="senior"><option value="senior">Senior division</option><option>Junior division</option></select></label><label>Competition format<select defaultValue="round"><option value="round">Round robin</option><option>Single elimination</option></select></label><label>Number of teams<input defaultValue="8" type="number"/></label></div></Panel><Panel title="Game rules"><div className="field-grid"><label>Game format<select><option>5 on 5</option></select></label><label>Period length<select><option>4 × 10 minutes</option><option>4 × 12 minutes</option></select></label><label>Overtime length<select><option>5 minutes · repeat if tied</option></select></label><label>Player limit<input defaultValue="12" type="number"/></label><label>Team foul limit<input defaultValue="5" type="number"/></label><label>Timeouts per team<input defaultValue="2" type="number"/></label></div></Panel><Panel title="Standings tie-breakers"><div className="rule-list"><div><span className="drag">⠿</span><b>Wins</b><Pill tone="neutral">1st</Pill></div><div><span className="drag">⠿</span><b>Head-to-head result</b><Pill tone="neutral">2nd</Pill></div><div><span className="drag">⠿</span><b>Point difference</b><Pill tone="neutral">3rd</Pill></div></div><Button><Plus size={15}/> Add tie-breaker</Button></Panel></div><aside className="side-summary"><Panel title="Current version"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Senior-2026-v1</b><Pill tone="soft-blue">ACTIVE</Pill><small>Created Oct 02, 2026 by Eugene Alfonso</small></div><div className="note-box"><CircleHelp size={16}/><span>Updates apply to games scheduled from now on. Games already started keep their original rule version.</span></div><button className="text-link full-link">View version history <ArrowRight size={14}/></button></Panel></aside></div>
+  const [rulesError, setRulesError] = useState('');
+  const [rules, setRules] = useState<BasketballRules>(loadBasketballRules);
+  const numberField = (key: NumberRuleKey, label: string) => <label>{label}<input type="number" min={ruleBounds[key][0]} max={ruleBounds[key][1]} value={rules[key]} onChange={e => { setRules(current => ({ ...current, [key]: Number(e.target.value) })); setRulesError(''); }}/></label>;
+  const toggleField = (key: BooleanRuleKey, label: string) => <label className="rule-toggle"><span>{label}</span><input type="checkbox" checked={rules[key]} onChange={e => { setRules(current => ({ ...current, [key]: e.target.checked })); setRulesError(''); }}/></label>;
+  function saveRuleSet() {
+    const invalid = (Object.entries(ruleBounds) as [NumberRuleKey, [number, number]][]).find(([key, [min, max]]) => !Number.isInteger(rules[key]) || rules[key] < min || rules[key] > max);
+    if (invalid) { setRulesError(`Check ${invalid[0]}: use a whole number from ${invalid[1][0]} to ${invalid[1][1]}.`); setSaved(false); return; }
+    saveBasketballRules(rules); setSaved(true); setRulesError('');
+  }
+  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Configure the basketball rules used by new games." action={<Button variant="primary" onClick={saveRuleSet}><Check size={16}/> Save rule set</Button>} />
+    {saved && <div className="success-banner"><CheckCircle2 size={17}/> Rule set saved on this device. New demo games will use these parameters.</div>}
+    {rulesError && <div className="form-error rule-error">{rulesError}</div>}
+    <div className="form-layout"><div className="form-main">
+      <Panel title="Competition details"><div className="field-grid"><label>Season name<input defaultValue="Community Cup 2026"/></label><label>Division<select defaultValue="senior"><option value="senior">Senior division</option><option>Junior division</option></select></label><label>Competition format<select defaultValue="round"><option value="round">Round robin</option><option>Single elimination</option></select></label><label>Number of teams<input defaultValue="8" type="number"/></label></div></Panel>
+      <Panel title="Game format"><div className="field-grid"><label>Format<select><option>5 on 5</option></select></label>{numberField('periodLengthMinutes','Quarter length (minutes)')}<label>Player limit<input defaultValue="12" type="number"/></label>{numberField('overtimeMinutes','Overtime length (minutes)')}</div></Panel>
+      <Panel title="Timeout rules"><div className="field-grid">{numberField('firstHalfTimeouts','Timeouts · first half (Q1–Q2)')}{numberField('secondHalfTimeouts','Timeouts · second half (Q3–Q4)')}{numberField('fourthQuarterTimeoutRestrictionMinutes','Q4 timeout restriction window (minutes)')}{numberField('finalTwoMinuteTimeoutMax','Maximum remaining in Q4 restriction window')}{numberField('timeoutDurationSeconds','Timeout duration (seconds)')}{toggleField('headCoachRequestRequired','Require Head Coach request at scorer’s table')}</div></Panel>
+      <Panel title="Fouls and ejections"><div className="field-grid">{numberField('playerFoulLimit','Personal fouls before disqualification')}{numberField('teamFoulPenaltyAt','Team foul penalty starts at foul number')}{numberField('teamFoulFreeThrows','Free throws for each defensive team foul at penalty')}{numberField('technicalFreeThrows','Free throws for a technical foul')}{numberField('ejectionTechnicalLimit','Ejection at technical fouls')}{numberField('ejectionUnsportsmanlikeLimit','Ejection at unsportsmanlike fouls')}{numberField('ejectionMixedTechnicalLimit','Mixed ejection · technical fouls')}{numberField('ejectionMixedUnsportsmanlikeLimit','Mixed ejection · unsportsmanlike fouls')}</div></Panel>
+      <Panel title="Overtime and game clock"><div className="field-grid">{numberField('overtimeTimeouts','Timeouts per team · each overtime')}{numberField('clockStopLastMinutes','Clock stops during final minutes')}{toggleField('carryFourthQuarterFoulsToOvertime','Carry Q4 team fouls into first overtime')}{toggleField('runningClockEnabled','Use running time')}{toggleField('clockStopInSecondQuarter','Stop clock in final minutes of Q2')}{toggleField('clockStopInFourthQuarter','Stop clock in final minutes of Q4')}</div><p className="rule-help">Unused first-half timeouts expire at halftime. Player fouls carry through. Clock and timeout settings apply to newly opened demo games.</p></Panel>
+      <Panel title="Standings tie-breakers"><div className="rule-list"><div><span className="drag">⠿</span><b>Wins</b><Pill tone="neutral">1st</Pill></div><div><span className="drag">⠿</span><b>Head-to-head result</b><Pill tone="neutral">2nd</Pill></div><div><span className="drag">⠿</span><b>Point difference</b><Pill tone="neutral">3rd</Pill></div></div><Button><Plus size={15}/> Add tie-breaker</Button></Panel>
+    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">PARAMETERIZED</Pill><small>Saved values apply on this browser.</small></div><div className="note-box"><CircleHelp size={16}/><span>Prototype settings are stored locally; they are not yet versioned in Supabase or attached to a scheduled game.</span></div><button className="text-link full-link" onClick={() => { setRules(loadBasketballRules()); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div>
   </>;
 }
 
@@ -145,9 +174,10 @@ export function Games() {
 }
 
 type LiveTeam = 'Warriors' | 'Falcons';
-type LivePlayer = { name: string; number: string; position: string; onCourt: boolean; stats: Record<string, number> };
+type LivePlayer = { name: string; number: string; position: string; onCourt: boolean; disqualified?: boolean; stats: Record<string, number> };
 type PendingPass = { team: LiveTeam; passer: LivePlayer; receiver: LivePlayer };
-type LiveEvent = { id: number; time: string; name: string; number: string; action: string; side: LiveTeam; points: number; playerName?: string; stat?: string; statDeltas?: Record<string, number>; substitution?: { outNumber: string; inNumber: string }; clockChange?: { remaining: number; period: string }; pass?: { passerNumber: string; receiverNumber: string } };
+type PendingFreeThrows = { team: LiveTeam; remaining: number; reason: string; resumeTeam?: LiveTeam };
+type LiveEvent = { id: number; time: string; name: string; number: string; action: string; side: LiveTeam; points: number; playerName?: string; stat?: string; statDeltas?: Record<string, number>; substitution?: { outNumber: string; inNumber: string }; clockChange?: { remaining: number; period: string }; pass?: { passerNumber: string; receiverNumber: string }; teamFoul?: boolean; freeThrowsAwarded?: { team: LiveTeam; count: number }; freeThrowsBefore?: PendingFreeThrows; disqualification?: string };
 const startingPlayers: Record<LiveTeam, LivePlayer[]> = {
   Warriors: [
     { name: 'Alex Cruz', number: '23', position: 'PG', onCourt: true, stats: { PTS: 18, REB: 4, AST: 3, PF: 2 } },
@@ -172,6 +202,7 @@ const startingPlayers: Record<LiveTeam, LivePlayer[]> = {
 };
 
 export function LiveGame() {
+  const [rules] = useState<BasketballRules>(loadBasketballRules);
   const [events, setEvents] = useState<LiveEvent[]>(initialEvents.map(event => ({ ...event, side: event.side as LiveTeam })));
   const [score, setScore] = useState<Record<LiveTeam, number>>({ Warriors: 68, Falcons: 65 });
   const [teams, setTeams] = useState(startingPlayers);
@@ -180,7 +211,10 @@ export function LiveGame() {
   const [period, setPeriod] = useState('Q4');
   const [clockRunning, setClockRunning] = useState(false);
   const [remaining, setRemaining] = useState(402);
-  const [timeouts, setTimeouts] = useState<Record<LiveTeam, number>>({ Warriors: 2, Falcons: 1 });
+  const [timeouts, setTimeouts] = useState<Record<LiveTeam, number>>(() => {
+    const allotment = period === 'Q1' || period === 'Q2' ? rules.firstHalfTimeouts : rules.secondHalfTimeouts;
+    return { Warriors: allotment, Falcons: allotment };
+  });
   const [teamFouls, setTeamFouls] = useState<Record<LiveTeam, number>>({ Warriors: 3, Falcons: 4 });
   const [notice, setNotice] = useState('Demo mode · events are held in this browser preview.');
   const [subOpen, setSubOpen] = useState(false);
@@ -193,9 +227,19 @@ export function LiveGame() {
   const [passTarget, setPassTarget] = useState('');
   const [pendingPass, setPendingPass] = useState<PendingPass | null>(null);
   const [assistPrompt, setAssistPrompt] = useState<{ passer: LivePlayer; shooter: LivePlayer; team: LiveTeam } | null>(null);
+  const [timeoutOpen, setTimeoutOpen] = useState(false);
+  const [coachRequestConfirmed, setCoachRequestConfirmed] = useState(false);
+  const [timeoutRemaining, setTimeoutRemaining] = useState<number | null>(null);
+  const [timeoutCapApplied, setTimeoutCapApplied] = useState(false);
+  const [foulOutPlayer, setFoulOutPlayer] = useState<{ team: LiveTeam; player: LivePlayer; reason: string } | null>(null);
+  const [foulOutReplacement, setFoulOutReplacement] = useState('');
+  const [foulOpen, setFoulOpen] = useState(false);
+  const [foulKind, setFoulKind] = useState<'defensive' | 'offensive' | 'technical' | 'unsportsmanlike'>('defensive');
+  const [technicalResumeTeam, setTechnicalResumeTeam] = useState<LiveTeam>('Falcons');
+  const [pendingFreeThrows, setPendingFreeThrows] = useState<PendingFreeThrows | null>(null);
   const player = teams[activeTeam].find(p => p.number === selected) ?? teams[activeTeam].find(p => p.onCourt)!;
   const onCourt = teams[activeTeam].filter(p => p.onCourt);
-  const bench = teams[activeTeam].filter(p => !p.onCourt);
+  const bench = teams[activeTeam].filter(p => !p.onCourt && !p.disqualified);
   const displayTime = `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
 
   useEffect(() => {
@@ -204,9 +248,41 @@ export function LiveGame() {
     return () => window.clearInterval(timer);
   }, [clockRunning, remaining]);
   useEffect(() => { if (remaining === 0) setClockRunning(false); }, [remaining]);
+  useEffect(() => {
+    if (timeoutRemaining === null || timeoutRemaining <= 0) return;
+    const timer = window.setInterval(() => setTimeoutRemaining(value => value === null ? null : Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [timeoutRemaining]);
+  useEffect(() => {
+    if (timeoutRemaining === 0) { setTimeoutRemaining(null); setNotice('Timeout ended. Start the game clock when ready.'); }
+  }, [timeoutRemaining]);
+  useEffect(() => {
+    const capAt = rules.fourthQuarterTimeoutRestrictionMinutes * 60;
+    if (period !== 'Q4' || remaining > capAt || timeoutCapApplied) return;
+    if (timeouts.Warriors <= rules.finalTwoMinuteTimeoutMax && timeouts.Falcons <= rules.finalTwoMinuteTimeoutMax) {
+      setTimeoutCapApplied(true);
+      return;
+    }
+    setTimeouts(current => ({ ...current, Warriors: Math.min(current.Warriors, rules.finalTwoMinuteTimeoutMax), Falcons: Math.min(current.Falcons, rules.finalTwoMinuteTimeoutMax) }));
+    setTimeoutCapApplied(true);
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: 'Game officials', number: '', action: `Timeout allotment capped at ${rules.finalTwoMinuteTimeoutMax} in final ${rules.fourthQuarterTimeoutRestrictionMinutes}:00`, side: activeTeam, points: 0 }, ...current]);
+    setNotice(`Final ${rules.fourthQuarterTimeoutRestrictionMinutes}:00 timeout limit applied`);
+  }, [activeTeam, displayTime, period, remaining, rules, timeoutCapApplied, timeouts]);
+
+  function shouldStopClockForDeadBall() {
+    if (!rules.runningClockEnabled) return true;
+    const inConfiguredStopPeriod = (period === 'Q2' && rules.clockStopInSecondQuarter) || (period === 'Q4' && rules.clockStopInFourthQuarter);
+    return inConfiguredStopPeriod && remaining <= rules.clockStopLastMinutes * 60;
+  }
 
   function record(action: string, points = 0, stat = '') {
+    if (timeoutRemaining !== null) { setNotice('Wait for the timeout to end before recording the next game event'); return; }
+    if (pendingFreeThrows && pendingFreeThrows.team === activeTeam && stat !== 'FTM' && stat !== 'FTA') {
+      setNotice(`Record the remaining ${pendingFreeThrows.remaining} free throw${pendingFreeThrows.remaining === 1 ? '' : 's'} first`);
+      return;
+    }
     const chosen = teams[activeTeam].find(p => p.number === selected) ?? player;
+    if (!chosen.onCourt || chosen.disqualified) { setNotice('Select an eligible player who is on court'); return; }
     const playerStats = { ...chosen.stats };
     const statDeltas: Record<string, number> = stat ? { [stat]: 1 } : {};
     if (stat === 'FGM') statDeltas.FGA = 1;
@@ -217,15 +293,25 @@ export function LiveGame() {
     for (const [key, delta] of Object.entries(statDeltas)) playerStats[key] = (playerStats[key] ?? 0) + delta;
     setTeams(current => ({ ...current, [activeTeam]: current[activeTeam].map(p => p.number === chosen.number ? { ...p, stats: playerStats } : p) }));
     setScore(current => ({ ...current, [activeTeam]: current[activeTeam] + points }));
-    if (stat === 'PF') setTeamFouls(current => ({ ...current, [activeTeam]: current[activeTeam] + 1 }));
-    setEvents(current => [{ id: Date.now(), time: displayTime, name: chosen.name, number: chosen.number, action, side: activeTeam, points, playerName: chosen.name, stat, statDeltas }, ...current]);
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: chosen.name, number: chosen.number, action, side: activeTeam, points, playerName: chosen.name, stat, statDeltas, ...((stat === 'FTM' || stat === 'FTA') && pendingFreeThrows ? { freeThrowsBefore: { ...pendingFreeThrows } } : {}) }, ...current]);
+    if (points && shouldStopClockForDeadBall()) setClockRunning(false);
+    if ((stat === 'FTM' || stat === 'FTA') && pendingFreeThrows?.team === activeTeam) {
+      if (pendingFreeThrows.remaining > 1) setPendingFreeThrows(current => current ? { ...current, remaining: current.remaining - 1 } : null);
+      else {
+        setPendingFreeThrows(null);
+        if (pendingFreeThrows.resumeTeam) {
+          setActiveTeam(pendingFreeThrows.resumeTeam);
+          setSelected(teams[pendingFreeThrows.resumeTeam].find(p => p.onCourt && !p.disqualified)?.number ?? '');
+        }
+      }
+    }
     setNotice(`${chosen.name} · ${action} recorded`);
     if (stat === 'FGM' || stat === '3PM') {
       if (pendingPass?.team === activeTeam && pendingPass.receiver.number === chosen.number) {
         setAssistPrompt({ passer: pendingPass.passer, shooter: chosen, team: activeTeam });
       }
       setPendingPass(null);
-    } else if (stat === 'FGA' || stat === '3PA' || stat === 'FTA') {
+    } else if (stat === 'FGA' || stat === '3PA' || stat === 'FTA' || stat === 'TO' || stat === 'STL') {
       setPendingPass(null);
     }
   }
@@ -250,6 +336,52 @@ export function LiveGame() {
     }
     setAssistPrompt(null);
   }
+  function recordFoul() {
+    const fouler = teams[activeTeam].find(p => p.number === selected && p.onCourt);
+    if (!fouler) return;
+    const foulingTeam = activeTeam;
+    const opponent: LiveTeam = foulingTeam === 'Warriors' ? 'Falcons' : 'Warriors';
+    const isPersonal = foulKind === 'defensive' || foulKind === 'offensive' || foulKind === 'unsportsmanlike';
+    const isTeamFoul = foulKind === 'defensive' || foulKind === 'unsportsmanlike';
+    const deltas: Record<string, number> = {};
+    if (isPersonal) deltas.PF = 1;
+    if (foulKind === 'technical') deltas.TECH = 1;
+    if (foulKind === 'unsportsmanlike') deltas.UNS = 1;
+    const nextStats = { ...fouler.stats };
+    for (const [key, value] of Object.entries(deltas)) nextStats[key] = (nextStats[key] ?? 0) + value;
+    const nextTeamFouls = teamFouls[foulingTeam] + (isTeamFoul ? 1 : 0);
+    const reachedPersonalLimit = isPersonal && nextStats.PF >= rules.playerFoulLimit;
+    const reachedEjectionLimit = (nextStats.TECH ?? 0) >= rules.ejectionTechnicalLimit || (nextStats.UNS ?? 0) >= rules.ejectionUnsportsmanlikeLimit || ((nextStats.TECH ?? 0) >= rules.ejectionMixedTechnicalLimit && (nextStats.UNS ?? 0) >= rules.ejectionMixedUnsportsmanlikeLimit);
+    const disqualified = reachedPersonalLimit || reachedEjectionLimit;
+    setTeams(current => ({ ...current, [foulingTeam]: current[foulingTeam].map(p => p.number === fouler.number ? { ...p, stats: nextStats, ...(disqualified ? { disqualified: true } : {}) } : p) }));
+    if (isTeamFoul) setTeamFouls(current => ({ ...current, [foulingTeam]: nextTeamFouls }));
+    const award = foulKind === 'technical' ? rules.technicalFreeThrows : isTeamFoul && nextTeamFouls >= rules.teamFoulPenaltyAt ? rules.teamFoulFreeThrows : 0;
+    const foulLabel = foulKind === 'defensive' ? 'Defensive personal foul' : foulKind === 'offensive' ? 'Offensive personal foul' : foulKind === 'technical' ? 'Technical foul' : 'Unsportsmanlike foul';
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: fouler.name, number: fouler.number, action: `${foulLabel}${award ? ` · ${award} FT awarded to ${opponent}` : ''}${disqualified ? ' · disqualified' : ''}`, side: foulingTeam, points: 0, playerName: fouler.name, stat: Object.keys(deltas)[0], statDeltas: deltas, teamFoul: isTeamFoul, ...(award ? { freeThrowsAwarded: { team: opponent, count: award } } : {}), ...(disqualified ? { disqualification: fouler.number } : {}) }, ...current]);
+    if (award > 0) {
+      setPendingFreeThrows({ team: opponent, remaining: award, reason: foulLabel, ...(foulKind === 'technical' ? { resumeTeam: technicalResumeTeam } : {}) });
+      setActiveTeam(opponent);
+      setSelected(teams[opponent].find(p => p.onCourt && !p.disqualified)?.number ?? '');
+    }
+    if (disqualified) {
+      setFoulOutPlayer({ team: foulingTeam, player: { ...fouler, stats: nextStats, disqualified: true }, reason: reachedPersonalLimit ? 'Personal foul limit reached' : 'Ejection threshold reached' });
+      setFoulOutReplacement(teams[foulingTeam].find(p => !p.onCourt && !p.disqualified)?.number ?? '');
+    }
+    setPendingPass(null);
+    if (shouldStopClockForDeadBall()) setClockRunning(false);
+    setNotice(disqualified ? `${fouler.name} is disqualified under the saved rule set` : award ? `${award} free throw${award === 1 ? '' : 's'} awarded to ${opponent}` : `${foulLabel} recorded`);
+    setFoulOpen(false);
+  }
+  function replaceFouledOutPlayer() {
+    if (!foulOutPlayer || !foulOutReplacement) return;
+    const { team, player: outgoing } = foulOutPlayer;
+    const incoming = teams[team].find(p => p.number === foulOutReplacement && !p.onCourt && !p.disqualified);
+    if (!incoming) return;
+    setTeams(current => ({ ...current, [team]: current[team].map(p => p.number === outgoing.number ? { ...p, onCourt: false } : p.number === incoming.number ? { ...p, onCourt: true } : p) }));
+    setEvents(current => [{ id: Date.now(), time: displayTime, name: `${incoming.name} replaces ${outgoing.name}`, number: incoming.number, action: 'Foul-out substitution', side: team, points: 0, substitution: { outNumber: outgoing.number, inNumber: incoming.number } }, ...current]);
+    setFoulOutPlayer(null);
+    if (activeTeam === team) setSelected(incoming.number);
+  }
   function substitute() {
     if (subOut === subIn) return;
     const outgoing = teams[activeTeam].find(p => p.number === subOut);
@@ -259,6 +391,7 @@ export function LiveGame() {
     setSelected(subIn);
     setEvents(current => [{ id: Date.now(), time: displayTime, name: `${incoming?.name} for ${outgoing.name}`, number: incoming?.number ?? '', action: 'Substitution', side: activeTeam, points: 0, substitution: { outNumber: subOut, inNumber: subIn } }, ...current]);
     setNotice(`${incoming?.name} checks in for ${outgoing.name}`);
+    setClockRunning(false);
     setSubOpen(false);
   }
   function undo() {
@@ -270,7 +403,11 @@ export function LiveGame() {
       setTeams(current => ({ ...current, [last.side]: current[last.side].map(p => p.number === last.substitution!.outNumber ? { ...p, onCourt: true } : p.number === last.substitution!.inNumber ? { ...p, onCourt: false } : p) }));
       setSelected(last.substitution.outNumber);
     }
-    if (last.action === 'Team timeout') setTimeouts(current => ({ ...current, [last.side]: current[last.side] + 1 }));
+    if (last.action === 'Team timeout') { setTimeouts(current => ({ ...current, [last.side]: current[last.side] + 1 })); setTimeoutRemaining(null); }
+    if (last.teamFoul) setTeamFouls(current => ({ ...current, [last.side]: Math.max(0, current[last.side] - 1) }));
+    if (last.freeThrowsAwarded) { setPendingFreeThrows(null); setActiveTeam(last.side); setSelected(last.number); }
+    if (last.freeThrowsBefore) { setPendingFreeThrows(last.freeThrowsBefore); setActiveTeam(last.side); }
+    if (last.disqualification) { setTeams(current => ({ ...current, [last.side]: current[last.side].map(p => p.number === last.disqualification ? { ...p, disqualified: false } : p) })); setFoulOutPlayer(null); }
     if (last.clockChange) { setRemaining(last.clockChange.remaining); setPeriod(last.clockChange.period); setClockRunning(false); }
     if (last.playerName && last.statDeltas) setTeams(current => ({ ...current, [last.side]: current[last.side].map(p => {
       if (p.name !== last.playerName) return p;
@@ -278,22 +415,44 @@ export function LiveGame() {
       for (const [key, delta] of Object.entries(last.statDeltas!)) stats[key] = Math.max(0, (stats[key] ?? 0) - delta);
       return { ...p, stats };
     }) }));
-    if (last.stat === 'PF') setTeamFouls(current => ({ ...current, [last.side]: Math.max(0, current[last.side] - 1) }));
     setEvents(current => current.slice(1));
     setNotice('Last event removed from this local preview.');
   }
   function useTimeout() {
+    if (timeoutRemaining !== null) { setNotice('A timeout is already in progress'); return; }
     if (timeouts[activeTeam] <= 0) { setNotice(`${activeTeam} has no timeouts remaining.`); return; }
+    setCoachRequestConfirmed(false);
+    setTimeoutOpen(true);
+  }
+  function confirmTimeout() {
+    if (rules.headCoachRequestRequired && !coachRequestConfirmed) return;
+    if (timeouts[activeTeam] <= 0) { setNotice(`${activeTeam} has no timeouts remaining.`); setTimeoutOpen(false); return; }
+    const inFinalWindow = period === 'Q4' && remaining <= rules.fourthQuarterTimeoutRestrictionMinutes * 60;
+    if (inFinalWindow && timeouts[activeTeam] > rules.finalTwoMinuteTimeoutMax) {
+      setTimeouts(current => ({ ...current, Warriors: Math.min(current.Warriors, rules.finalTwoMinuteTimeoutMax), Falcons: Math.min(current.Falcons, rules.finalTwoMinuteTimeoutMax) }));
+      setTimeoutCapApplied(true);
+      setEvents(current => [{ id: Date.now(), time: displayTime, name: 'Game officials', number: '', action: `Timeout allotment capped at ${rules.finalTwoMinuteTimeoutMax}`, side: activeTeam, points: 0 }, ...current]);
+    }
     setTimeouts(current => ({ ...current, [activeTeam]: current[activeTeam] - 1 }));
-    setEvents(current => [{ id: Date.now(), time: displayTime, name: activeTeam, number: '', action: 'Team timeout', side: activeTeam, points: 0 }, ...current]);
-    setNotice(`${activeTeam} timeout recorded`);
+    setEvents(current => [{ id: Date.now() + 1, time: displayTime, name: activeTeam, number: '', action: 'Team timeout', side: activeTeam, points: 0 }, ...current]);
+    setNotice(`${activeTeam} timeout · ${rules.timeoutDurationSeconds}-second timer started`);
+    setTimeoutRemaining(rules.timeoutDurationSeconds);
     setClockRunning(false);
+    setTimeoutOpen(false);
   }
   function advancePeriod() {
-    const next = period === 'Q4' ? 'OT' : period === 'OT' ? 'OT2' : `Q${Number(period.replace('Q', '')) + 1}`;
-    setPeriod(next); setRemaining(600); setClockRunning(false);
-    setEvents(current => [{ id: Date.now(), time: '10:00', name: 'Game clock', number: '', action: `Start of ${next}`, side: activeTeam, points: 0, clockChange: { remaining, period } }, ...current]);
-    setNotice(`Period advanced to ${next}; clock reset to 10:00`);
+    const isOT = period.startsWith('OT');
+    const next = period === 'Q4' ? 'OT' : isOT ? `OT${Number(period.replace('OT', '') || '1') + 1}` : `Q${Number(period.replace('Q', '')) + 1}`;
+    const nextIsOT = next.startsWith('OT');
+    const carryFouls = period === 'Q4' && next === 'OT' && rules.carryFourthQuarterFoulsToOvertime;
+    setPeriod(next); setRemaining((nextIsOT ? rules.overtimeMinutes : rules.periodLengthMinutes) * 60); setClockRunning(false); setPendingPass(null);
+    if (period === 'Q2') setTimeouts({ Warriors: rules.secondHalfTimeouts, Falcons: rules.secondHalfTimeouts });
+    if (nextIsOT) setTimeouts({ Warriors: rules.overtimeTimeouts, Falcons: rules.overtimeTimeouts });
+    if (next === 'Q4') setTimeoutCapApplied(false);
+    if (!carryFouls) setTeamFouls({ Warriors: 0, Falcons: 0 });
+    const nextLength = nextIsOT ? rules.overtimeMinutes : rules.periodLengthMinutes;
+    setEvents(current => [{ id: Date.now(), time: `${nextLength}:00`, name: 'Game clock', number: '', action: `Start of ${next}`, side: activeTeam, points: 0, clockChange: { remaining, period } }, ...current]);
+    setNotice(`Period advanced to ${next}; clock reset to ${nextIsOT ? rules.overtimeMinutes : rules.periodLengthMinutes}:00`);
   }
   function saveClockAdjustment() {
     const [minutes, seconds] = clockInput.split(':').map(Number);
@@ -303,14 +462,18 @@ export function LiveGame() {
     setEvents(current => [{ id: Date.now(), time: `${clockInput}`, name: 'Game clock', number: '', action: `Clock adjusted · ${clockReason.trim()}`, side: activeTeam, points: 0, clockChange: { remaining, period } }, ...current]);
     setNotice(`Clock adjusted to ${clockInput}`); setClockReason('');
   }
-  function switchTeam(team: LiveTeam) { setActiveTeam(team); setSelected(startingPlayers[team].find(p => p.onCourt)!.number); }
+  function switchTeam(team: LiveTeam) {
+    if (pendingFreeThrows && team !== pendingFreeThrows.team) { setNotice(`Finish the ${pendingFreeThrows.remaining} free throw${pendingFreeThrows.remaining === 1 ? '' : 's'} first`); return; }
+    if (team !== activeTeam) setPendingPass(null);
+    setActiveTeam(team); setSelected(teams[team].find(p => p.onCourt && !p.disqualified)!.number);
+  }
 
   return <>
     <PageTitle eyebrow="COURTSIDE · GAME CC-026" title="Live game console" subtitle="Pasig Warriors vs River Falcons · Community Court A" action={<><Link className="button" to="/games/review"><CheckCircle2 size={16}/> Review game</Link><Button><Ellipsis size={17}/></Button></>} />
-    <div className="console-status"><span><span className="pulse-dot"/> LIVE · {period}</span><span><WifiOff size={14}/> Demo preview · local state only</span><span className="console-status-right">Assigned scorer: Staff 02 · {clockRunning ? 'Clock running' : 'Clock stopped'}</span></div>
+    <div className="console-status"><span><span className="pulse-dot"/> LIVE · {period}</span><span><WifiOff size={14}/> Demo preview · local state only</span><span className="console-status-right">Assigned scorer: Staff 02 · {clockRunning ? 'Clock running' : 'Clock stopped'}{timeoutRemaining !== null ? ` · Timeout ${Math.floor(timeoutRemaining / 60)}:${String(timeoutRemaining % 60).padStart(2, '0')}` : ''}</span></div>
     <div className="score-console">
       <div className="score-team"><span className="team-mark blue-mark large-mark">PW</span><span className="score-team-name">PASIG WARRIORS</span><strong>{score.Warriors}</strong><div className="score-meta"><span>TEAM FOULS <b>{teamFouls.Warriors}</b></span><span>TIMEOUTS <b>{timeouts.Warriors}</b></span></div></div>
-      <div className="game-clock"><div className="clock-period"><button onClick={advancePeriod}>{period} <ChevronDown size={13}/></button><Pill tone="live"><span className="pulse-dot"/> IN PROGRESS</Pill></div><strong>{displayTime}</strong><div className="clock-buttons"><Button variant="primary" onClick={() => { if (remaining === 0) { setNotice('The period clock is at 00:00. Advance the period to continue.'); return; } setClockRunning(!clockRunning); }}>{clockRunning ? <><Pause size={13}/> Pause</> : <><Play size={13}/> Start clock</>}</Button><Button onClick={() => { setRemaining(600); setClockRunning(false); }}>Reset</Button></div><small>{remaining === 0 ? 'Period ended' : clockRunning ? 'Clock running' : 'Clock stopped'} · tap period to advance</small></div>
+      <div className="game-clock"><div className="clock-period"><button onClick={advancePeriod}>{period} <ChevronDown size={13}/></button><Pill tone="live"><span className="pulse-dot"/> IN PROGRESS</Pill></div><strong>{displayTime}</strong><div className="clock-buttons"><Button variant="primary" disabled={timeoutRemaining !== null} onClick={() => { if (remaining === 0) { setNotice('The period clock is at 00:00. Advance the period to continue.'); return; } setClockRunning(!clockRunning); }}>{clockRunning ? <><Pause size={13}/> Pause</> : <><Play size={13}/> Start clock</>}</Button><Button onClick={() => { setRemaining((period.startsWith('OT') ? rules.overtimeMinutes : rules.periodLengthMinutes) * 60); setClockRunning(false); }}>Reset</Button></div><small>{remaining === 0 ? 'Period ended' : timeoutRemaining !== null ? 'Timeout in progress' : clockRunning ? 'Clock running' : 'Clock stopped'} · {rules.runningClockEnabled ? `running time; stops in final ${rules.clockStopLastMinutes}:00 of configured quarters` : 'stop-clock mode'}</small></div>
       <div className="score-team"><span className="team-mark orange-mark large-mark">RF</span><span className="score-team-name">RIVER FALCONS</span><strong>{score.Falcons}</strong><div className="score-meta"><span>TEAM FOULS <b>{teamFouls.Falcons}</b></span><span>TIMEOUTS <b>{timeouts.Falcons}</b></span></div></div>
     </div>
     <div className="scoring-layout">
@@ -322,7 +485,8 @@ export function LiveGame() {
         <div className="bench-row"><div className="on-court-label">BENCH <span>{bench.length} available</span></div><div className="player-chips">{bench.map(p => <button key={p.number} onClick={() => { setSubIn(p.number); setSubOut(onCourt[0]?.number ?? ''); setSubOpen(true); }}><Avatar initials={p.name.split(' ').map(n => n[0]).join('')} color="lavender"/><span>{p.name}<small>#{p.number} · {p.position}</small></span></button>)}<button className="sub-action" onClick={() => { setSubOut(onCourt[0]?.number ?? ''); setSubIn(bench[0]?.number ?? ''); setSubOpen(true); }}><ArrowLeftRight size={14}/><span>Substitute<small>Change lineup</small></span></button></div></div>
         <div className="stat-group"><div className="stat-group-label">SHOOTING</div><div className="stat-grid shot-grid"><button onClick={() => record('2PT made', 2, 'FGM')}><b>+2</b><small>2PT made</small></button><button onClick={() => record('2PT missed', 0, 'FGA')}><b>2PT</b><small>missed</small></button><button onClick={() => record('3PT made', 3, '3PM')}><b>+3</b><small>3PT made</small></button><button onClick={() => record('3PT missed', 0, '3PA')}><b>3PT</b><small>missed</small></button><button onClick={() => record('Free throw made', 1, 'FTM')}><b>+1</b><small>FT made</small></button><button onClick={() => record('Free throw missed', 0, 'FTA')}><b>FT</b><small>missed</small></button></div></div>
         {pendingPass && <div className="pending-pass"><span><ArrowLeftRight size={14}/><b>Pass ready for assist check</b><small>{pendingPass.passer.name} → {pendingPass.receiver.name}</small></span><button onClick={() => { setPendingPass(null); setNotice('Pending pass cleared'); }}>Clear</button></div>}
-        <div className="stat-group"><div className="stat-group-label">PLAYER STATS</div><div className="stat-grid"><button onClick={() => record('Offensive rebound', 0, 'OREB')}><b>OREB</b><small>Off. rebound</small></button><button onClick={() => record('Defensive rebound', 0, 'DREB')}><b>DREB</b><small>Def. rebound</small></button><button onClick={() => { setPassTarget(onCourt.find(p => p.number !== selected)?.number ?? ''); setPassOpen(true); }}><b>PASS</b><small>To teammate</small></button><button onClick={() => record('Assist', 0, 'AST')}><b>AST</b><small>Assist</small></button><button onClick={() => record('Steal', 0, 'STL')}><b>STL</b><small>Steal</small></button><button onClick={() => record('Block', 0, 'BLK')}><b>BLK</b><small>Block</small></button><button onClick={() => record('Turnover', 0, 'TO')}><b>TO</b><small>Turnover</small></button><button onClick={() => record('Personal foul', 0, 'PF')}><b>FOUL</b><small>Personal foul</small></button><button onClick={() => { setSubOut(onCourt[0]?.number ?? ''); setSubIn(bench[0]?.number ?? ''); setSubOpen(true); }}><b>SUB</b><small>Substitution</small></button></div></div>
+        {pendingFreeThrows && <div className="pending-pass penalty-banner"><span><Flag size={14}/><b>{pendingFreeThrows.remaining} free throw{pendingFreeThrows.remaining === 1 ? '' : 's'} to record</b><small>{pendingFreeThrows.team} shooting · {pendingFreeThrows.reason}</small></span><b>Choose the shooter, then tap FT made/missed</b></div>}
+        <div className="stat-group"><div className="stat-group-label">PLAYER STATS</div><div className="stat-grid"><button onClick={() => record('Offensive rebound', 0, 'OREB')}><b>OREB</b><small>Off. rebound</small></button><button onClick={() => record('Defensive rebound', 0, 'DREB')}><b>DREB</b><small>Def. rebound</small></button><button onClick={() => { setPassTarget(onCourt.find(p => p.number !== selected)?.number ?? ''); setPassOpen(true); }}><b>PASS</b><small>To teammate</small></button><button onClick={() => record('Assist', 0, 'AST')}><b>AST</b><small>Assist</small></button><button onClick={() => record('Steal', 0, 'STL')}><b>STL</b><small>Steal</small></button><button onClick={() => record('Block', 0, 'BLK')}><b>BLK</b><small>Block</small></button><button onClick={() => record('Turnover', 0, 'TO')}><b>TO</b><small>Turnover</small></button><button onClick={() => { setFoulKind('defensive'); setTechnicalResumeTeam(activeTeam === 'Warriors' ? 'Falcons' : 'Warriors'); setFoulOpen(true); }}><b>FOUL</b><small>Foul type…</small></button><button onClick={() => { setSubOut(onCourt[0]?.number ?? ''); setSubIn(bench[0]?.number ?? ''); setSubOpen(true); }}><b>SUB</b><small>Substitution</small></button></div></div>
         <div className="scoring-controls"><Button onClick={() => { setClockInput(displayTime); setClockOpen(true); }}><Clock3 size={15}/> Adjust clock</Button><Button onClick={useTimeout}>Team timeout</Button><Button onClick={advancePeriod}>End period <ArrowRight size={13}/></Button></div>
       </section>
       <section className="panel play-panel"><div className="panel-heading"><div><h2>Play-by-play</h2><p>Event log · newest first</p></div><Button onClick={undo}><Undo2 size={15}/> Undo last</Button></div><div className="sync-note"><CheckCircle2 size={15}/><span>{notice}</span><button className="icon-button"><Ellipsis size={17}/></button></div><div className="timeline">{events.map((event, i) => <div key={event.id} className="timeline-event"><span className={`timeline-marker ${event.points ? 'points' : ''}`}>{event.points ? '+' + event.points : '•'}</span><div className="timeline-copy"><b>{event.name} {event.number && <span>#{event.number}</span>}</b><small>{event.action} · {event.side}</small></div><time>{event.time}</time><button className="icon-button" aria-label="Event options"><Ellipsis size={16}/></button>{i === 0 && <span className="new-event">NEW</span>}</div>)}</div><div className="panel-bottom"><Link to="/games/review" className="text-link">Open full box score <ArrowRight size={14}/></Link><span className="muted tiny">Changes are tracked in the game log</span></div></section>
@@ -331,6 +495,9 @@ export function LiveGame() {
     {clockOpen && <div className="modal-scrim" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setClockOpen(false); }}><form className="game-modal" onSubmit={e => { e.preventDefault(); saveClockAdjustment(); }}><div className="modal-heading"><div><span className="eyebrow">GAME CC-026 · {period}</span><h2>Adjust game clock</h2><p>Clock adjustments are added to the game log.</p></div><button type="button" className="icon-button" aria-label="Close" onClick={() => setClockOpen(false)}><X size={17}/></button></div><div className="field-grid"><label>Time remaining<input type="text" value={clockInput} onChange={e => setClockInput(e.target.value)} placeholder="MM:SS" pattern="[0-9]{1,2}:[0-5][0-9]" required/></label><label>Reason<input value={clockReason} onChange={e => setClockReason(e.target.value)} placeholder="e.g. official correction" required/></label></div><div className="modal-footer"><Button onClick={() => setClockOpen(false)}>Cancel</Button><Button type="submit" variant="primary"><Check size={15}/> Save adjustment</Button></div></form></div>}
     {passOpen && <div className="modal-scrim" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setPassOpen(false); }}><section className="game-modal"><div className="modal-heading"><div><span className="eyebrow">{activeTeam.toUpperCase()} · PASS EVENT</span><h2>Record a pass</h2><p>Choose the teammate receiving the pass. A made shot by them will trigger an assist check.</p></div><button className="icon-button" aria-label="Close" onClick={() => setPassOpen(false)}><X size={17}/></button></div><div className="field-grid"><label>Passer<input value={`#${player.number} · ${player.name}`} readOnly/></label><label>Pass to<select value={passTarget} onChange={e => setPassTarget(e.target.value)}>{onCourt.filter(p => p.number !== selected).map(p => <option key={p.number} value={p.number}>#{p.number} · {p.name}</option>)}</select></label></div><div className="modal-footer"><Button onClick={() => setPassOpen(false)}>Cancel</Button><Button variant="primary" onClick={recordPass}><ArrowLeftRight size={15}/> Record pass</Button></div></section></div>}
     {assistPrompt && <div className="modal-scrim assist-scrim"><section className="game-modal assist-modal" role="dialog" aria-modal="true" aria-labelledby="assist-prompt-title"><span className="assist-check-icon"><CheckCircle2 size={20}/></span><span className="eyebrow">ASSIST VALIDATION</span><h2 id="assist-prompt-title">Credit an assist?</h2><p><b>{assistPrompt.passer.name}</b> passed to <b>{assistPrompt.shooter.name}</b>, who just scored. Did that pass directly lead to the basket?</p><div className="modal-footer"><Button onClick={() => validateAssist(false)}>No assist</Button><Button variant="primary" onClick={() => validateAssist(true)}><Check size={15}/> Yes, credit assist</Button></div></section></div>}
+    {timeoutOpen && <div className="modal-scrim assist-scrim"><section className="game-modal"><div className="modal-heading"><div><span className="eyebrow">{activeTeam.toUpperCase()} · TIMEOUT</span><h2>Confirm timeout request</h2><p>A timeout lasts {rules.timeoutDurationSeconds} seconds. Available: {timeouts[activeTeam]}.</p></div><button className="icon-button" aria-label="Close" onClick={() => setTimeoutOpen(false)}><X size={17}/></button></div>{rules.headCoachRequestRequired && <label className="coach-confirm"><input type="checkbox" checked={coachRequestConfirmed} onChange={e => setCoachRequestConfirmed(e.target.checked)}/><span>Head Coach requested this timeout at the scorer’s table.</span></label>}<div className="modal-footer"><Button onClick={() => setTimeoutOpen(false)}>Cancel</Button><Button variant="primary" onClick={confirmTimeout} disabled={rules.headCoachRequestRequired && !coachRequestConfirmed}><Clock3 size={15}/> Start timeout</Button></div></section></div>}
+    {foulOpen && <div className="modal-scrim assist-scrim"><section className="game-modal"><div className="modal-heading"><div><span className="eyebrow">{activeTeam.toUpperCase()} · FOUL REPORT</span><h2>Record a foul</h2><p>Player #{player.number} · {player.name}. Classify it to apply the configured penalty.</p></div><button className="icon-button" aria-label="Close" onClick={() => setFoulOpen(false)}><X size={17}/></button></div><div className="field-grid"><label>Foul type<select value={foulKind} onChange={e => setFoulKind(e.target.value as typeof foulKind)}><option value="defensive">Defensive personal foul</option><option value="offensive">Offensive personal foul</option><option value="technical">Technical foul</option><option value="unsportsmanlike">Unsportsmanlike foul</option></select></label>{foulKind === 'technical' && <label>Team with possession at interruption<select value={technicalResumeTeam} onChange={e => setTechnicalResumeTeam(e.target.value as LiveTeam)}><option value="Warriors">Warriors</option><option value="Falcons">Falcons</option></select></label>}</div><p className="rule-help">Defensive fouls count toward the quarter’s team-foul penalty. A personal foul at the configured limit disqualifies the player. Technical and unsportsmanlike counts apply the saved ejection thresholds.</p><div className="modal-footer"><Button onClick={() => setFoulOpen(false)}>Cancel</Button><Button variant="primary" onClick={recordFoul}><Flag size={15}/> Record foul</Button></div></section></div>}
+    {foulOutPlayer && <div className="modal-scrim assist-scrim"><section className="game-modal"><div className="modal-heading"><div><span className="eyebrow">PLAYER DISQUALIFIED</span><h2>{foulOutPlayer.player.name} must leave the game</h2><p>{foulOutPlayer.reason} · {foulOutPlayer.player.stats.PF ?? 0} personal fouls.</p></div></div>{teams[foulOutPlayer.team].some(p => !p.onCourt && !p.disqualified) ? <div className="field-grid"><label>Substitute<select value={foulOutReplacement} onChange={e => setFoulOutReplacement(e.target.value)}>{teams[foulOutPlayer.team].filter(p => !p.onCourt && !p.disqualified).map(p => <option key={p.number} value={p.number}>#{p.number} · {p.name}</option>)}</select></label></div> : <div className="form-error">No eligible bench player is available.</div>}<div className="modal-footer">{teams[foulOutPlayer.team].some(p => !p.onCourt && !p.disqualified) ? <Button variant="primary" onClick={replaceFouledOutPlayer}><ArrowLeftRight size={15}/> Send in substitute</Button> : <Button variant="primary" onClick={() => { setTeams(current => ({ ...current, [foulOutPlayer.team]: current[foulOutPlayer.team].map(p => p.number === foulOutPlayer.player.number ? { ...p, onCourt: false } : p) })); const next = teams[foulOutPlayer.team].find(p => p.onCourt && p.number !== foulOutPlayer.player.number && !p.disqualified); if (activeTeam === foulOutPlayer.team && next) setSelected(next.number); setFoulOutPlayer(null); }}>Continue with fewer players</Button>}</div></section></div>}
   </>;
 }
 
