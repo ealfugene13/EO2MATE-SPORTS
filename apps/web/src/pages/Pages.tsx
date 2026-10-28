@@ -6,11 +6,18 @@ import {
   Search, ShieldCheck, Sparkles, Trophy, Undo2, Users, UserRound, Wifi, WifiOff,
   ArrowLeftRight, Pause, Play, X,
 } from 'lucide-react';
-import { loadBasketballRules, type BasketballRules } from '../lib/basketballRules';
+import type { BasketballRules } from '../lib/basketballRules';
 import { DataState, useWorkspaceRows } from '../lib/workspaceData';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { getWorkspace } from '../lib/workspaceData';
+
+async function getBasketballRuleDefaults(): Promise<BasketballRules> {
+  const { data, error } = await supabase.rpc('get_basketball_rule_defaults');
+  if (error) throw error;
+  if (!data || typeof data !== 'object') throw new Error('Basketball rule defaults are missing in the database. Apply migration 0004.');
+  return data as BasketballRules;
+}
 
 type Row = { cells: string[]; status?: string };
 type NumberRuleKey = { [K in keyof BasketballRules]: BasketballRules[K] extends number ? K : never }[keyof BasketballRules];
@@ -69,7 +76,7 @@ export function Dashboard() {
 export function Competition() {
   const [saved, setSaved] = useState(false);
   const [rulesError, setRulesError] = useState('');
-  const [rules, setRules] = useState<BasketballRules>(loadBasketballRules);
+  const [rules, setRules] = useState<BasketballRules | null>(null);
   type CompetitionRow = { id: string; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; seasons?:{name:string}|null };
   const competitionsData = useWorkspaceRows<CompetitionRow>('competitions','id,name,format,rule_settings,rule_version,season_id,created_at,seasons(name)');
   const seasonsData=useWorkspaceRows<{id:string;name:string;active:boolean}>('seasons','id,name,active,created_at');
@@ -80,11 +87,22 @@ export function Competition() {
   const activeCompetition = creatingCompetition?undefined:(competitionsData.rows.find(row=>row.id===selectedCompetitionId)??competitionsData.rows[0]);
   useEffect(()=>{if(!selectedCompetitionId&&competitionsData.rows[0])setSelectedCompetitionId(competitionsData.rows[0].id);},[selectedCompetitionId,competitionsData.rows]);
   useEffect(() => {
-    if (activeCompetition) { setCompetitionName(activeCompetition.name); setSeasonName(activeCompetition.seasons?.name??''); setCompetitionFormat(activeCompetition.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN_SINGLE' : activeCompetition.format); setRules(activeCompetition.rule_settings); }
-  }, [activeCompetition?.id]);
-  const numberField = (key: NumberRuleKey, label: string) => <label>{label}<input type="number" min={ruleBounds[key][0]} max={ruleBounds[key][1]} value={rules[key]} onChange={e => { setRules(current => ({ ...current, [key]: Number(e.target.value) })); setRulesError(''); }}/></label>;
-  const toggleField = (key: BooleanRuleKey, label: string) => <label className="rule-toggle"><span>{label}</span><input type="checkbox" checked={rules[key]} onChange={e => { setRules(current => ({ ...current, [key]: e.target.checked })); setRulesError(''); }}/></label>;
+    let cancelled = false;
+    if (activeCompetition) {
+      setCompetitionName(activeCompetition.name); setSeasonName(activeCompetition.seasons?.name??'');
+      setCompetitionFormat(activeCompetition.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN_SINGLE' : activeCompetition.format);
+      setRules(activeCompetition.rule_settings);
+    } else if (!competitionsData.loading) {
+      setRules(null);
+      void getBasketballRuleDefaults().then(value => { if (!cancelled) setRules(value); })
+        .catch(error => { if (!cancelled) setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.'); });
+    }
+    return () => { cancelled = true; };
+  }, [activeCompetition?.id, competitionsData.loading, creatingCompetition]);
+  const numberField = (key: NumberRuleKey, label: string) => !rules ? null : <label>{label}<input type="number" min={ruleBounds[key][0]} max={ruleBounds[key][1]} value={rules[key]} onChange={e => { setRules(current => current ? ({ ...current, [key]: Number(e.target.value) }) : current); setRulesError(''); }}/></label>;
+  const toggleField = (key: BooleanRuleKey, label: string) => !rules ? null : <label className="rule-toggle"><span>{label}</span><input type="checkbox" checked={rules[key]} onChange={e => { setRules(current => current ? ({ ...current, [key]: e.target.checked }) : current); setRulesError(''); }}/></label>;
   async function saveRuleSet() {
+    if (!rules) { setRulesError('Load the basketball rule defaults from the database before saving.'); return; }
     const invalid = (Object.entries(ruleBounds) as [NumberRuleKey, [number, number]][]).find(([key, [min, max]]) => !Number.isInteger(rules[key]) || rules[key] < min || rules[key] > max);
     if (invalid) { setRulesError(`Check ${invalid[0]}: use a whole number from ${invalid[1][0]} to ${invalid[1][1]}.`); setSaved(false); return; }
     if (!competitionName.trim()||!seasonName.trim()) { setRulesError('Enter both a competition name and season name before saving.'); return; }
@@ -97,18 +115,19 @@ export function Competition() {
       setSaved(true);
     } catch (e) { setRulesError(e instanceof Error ? e.message : 'Unable to save the competition rule set.'); }
   }
-  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Choose single or double round robin, or a single-elimination bracket. Basketball rules are saved per competition." action={<div className="table-actions"><Button onClick={()=>{setCreatingCompetition(true);setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(loadBasketballRules());setSaved(false);}}><Plus size={15}/>New competition</Button><Button variant="primary" onClick={()=>void saveRuleSet()} disabled={competitionsData.loading||seasonsData.loading}><Check size={16}/> Save rule set</Button></div>} />
+  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Choose single or double round robin, or a single-elimination bracket. Basketball rule defaults come from the database." action={<div className="table-actions"><Button onClick={()=>{setCreatingCompetition(true);setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(null);setRulesError('');setSaved(false);}}><Plus size={15}/>New competition</Button><Button variant="primary" onClick={()=>void saveRuleSet()} disabled={competitionsData.loading||seasonsData.loading||!rules}><Check size={16}/> Save rule set</Button></div>} />
     <DataState loading={competitionsData.loading||seasonsData.loading} error={competitionsData.error||seasonsData.error} onRetry={() => {void competitionsData.reload();void seasonsData.reload();}}/>
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
     {rulesError && <div className="form-error rule-error">{rulesError}</div>}
     <div className="form-layout"><div className="form-main">
       <Panel title="Competition details"><div className="field-grid">{competitionsData.rows.length>0&&!creatingCompetition&&<label className="span-2">Competition<select value={activeCompetition?.id??''} onChange={e=>{setSelectedCompetitionId(e.target.value);setCreatingCompetition(false);}}>{competitionsData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}<label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
-      <Panel title="Game format"><div className="field-grid"><label>Format<input value="5 on 5 basketball" readOnly/></label>{numberField('periodLengthMinutes','Quarter length (minutes)')}{numberField('overtimeMinutes','Overtime length (minutes)')}</div></Panel>
+      {!rules&&<div className="empty-state">Loading rule defaults from the database…</div>}
+      {rules&&<><Panel title="Game format"><div className="field-grid"><label>Format<input value="5 on 5 basketball" readOnly/></label>{numberField('periodLengthMinutes','Quarter length (minutes)')}{numberField('overtimeMinutes','Overtime length (minutes)')}</div></Panel>
       <Panel title="Timeout rules"><div className="field-grid">{numberField('firstHalfTimeouts','Timeouts · first half (Q1–Q2)')}{numberField('secondHalfTimeouts','Timeouts · second half (Q3–Q4)')}{numberField('fourthQuarterTimeoutRestrictionMinutes','Q4 timeout restriction window (minutes)')}{numberField('finalTwoMinuteTimeoutMax','Maximum remaining in Q4 restriction window')}{numberField('timeoutDurationSeconds','Timeout duration (seconds)')}{toggleField('headCoachRequestRequired','Require Head Coach request at scorer’s table')}</div></Panel>
       <Panel title="Fouls and ejections"><div className="field-grid">{numberField('playerFoulLimit','Personal fouls before disqualification')}{numberField('teamFoulPenaltyAt','Team foul penalty starts at foul number')}{numberField('teamFoulFreeThrows','Free throws for each defensive team foul at penalty')}{numberField('technicalFreeThrows','Free throws for a technical foul')}{numberField('ejectionTechnicalLimit','Ejection at technical fouls')}{numberField('ejectionUnsportsmanlikeLimit','Ejection at unsportsmanlike fouls')}{numberField('ejectionMixedTechnicalLimit','Mixed ejection · technical fouls')}{numberField('ejectionMixedUnsportsmanlikeLimit','Mixed ejection · unsportsmanlike fouls')}</div></Panel>
-      <Panel title="Overtime and game clock"><div className="field-grid">{numberField('overtimeTimeouts','Timeouts per team · each overtime')}{numberField('clockStopLastMinutes','Clock stops during final minutes')}{toggleField('carryFourthQuarterFoulsToOvertime','Carry Q4 team fouls into first overtime')}{toggleField('runningClockEnabled','Use running time')}{toggleField('clockStopInSecondQuarter','Stop clock in final minutes of Q2')}{toggleField('clockStopInFourthQuarter','Stop clock in final minutes of Q4')}</div><p className="rule-help">These values are saved with the competition and copied into each new game's rule snapshot.</p></Panel>
+      <Panel title="Overtime and game clock"><div className="field-grid">{numberField('overtimeTimeouts','Timeouts per team · each overtime')}{numberField('clockStopLastMinutes','Clock stops during final minutes')}{toggleField('carryFourthQuarterFoulsToOvertime','Carry Q4 team fouls into first overtime')}{toggleField('runningClockEnabled','Use running time')}{toggleField('clockStopInSecondQuarter','Stop clock in final minutes of Q2')}{toggleField('clockStopInFourthQuarter','Stop clock in final minutes of Q4')}</div><p className="rule-help">These values are saved with the competition and copied into each new game's rule snapshot.</p></Panel></>}
       <Panel title="Standings tie-breakers"><div className="rule-list"><div><span className="drag">1</span><b>Wins</b><Pill tone="neutral">1st</Pill></div><div><span className="drag">2</span><b>Head-to-head result</b><Pill tone="neutral">2nd</Pill></div><div><span className="drag">3</span><b>Point difference</b><Pill tone="neutral">3rd</Pill></div></div><small className="muted">Default tie-break order for this competition.</small></Panel>
-    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">{activeCompetition ? `VERSION ${activeCompetition.rule_version}` : 'NEW'}</Pill><small>Rules are saved per competition.</small></div><div className="note-box"><CircleHelp size={16}/><span>New games will copy a snapshot of this competition's rule version.</span></div><button className="text-link full-link" onClick={() => { setRules(activeCompetition?.rule_settings ?? loadBasketballRules()); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div>
+    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">{activeCompetition ? `VERSION ${activeCompetition.rule_version}` : 'DATABASE DEFAULTS'}</Pill><small>Rule defaults and competition settings are stored in Supabase.</small></div><div className="note-box"><CircleHelp size={16}/><span>New games copy the saved competition rules into a database snapshot.</span></div><button className="text-link full-link" onClick={() => { setRulesError(''); setRules(activeCompetition?.rule_settings ?? null); if (!activeCompetition) void getBasketballRuleDefaults().then(setRules).catch(error => setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.')); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div>
   </>;
 }
 
@@ -243,7 +262,8 @@ const startingPlayers: Record<LiveTeam, LivePlayer[]> = {
 };
 
 function LiveGamePrototype() {
-  const [rules] = useState<BasketballRules>(loadBasketballRules);
+  const [rules, setRules] = useState<BasketballRules>({} as BasketballRules);
+  useEffect(() => { void getBasketballRuleDefaults().then(setRules).catch(() => {}); }, []);
   const [events, setEvents] = useState<LiveEvent[]>(initialEvents.map(event => ({ ...event, side: event.side as LiveTeam })));
   const [score, setScore] = useState<Record<LiveTeam, number>>({ Warriors: 68, Falcons: 65 });
   const [teams, setTeams] = useState(startingPlayers);
