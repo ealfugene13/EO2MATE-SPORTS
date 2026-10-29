@@ -251,16 +251,21 @@ export function Competition() {
     if(!activeCompetition)return;
     setBulkBusy(true);setRulesError('');setRulesNotice('');
     try{
-      const lines=bulkCsv.trim().split(/\r?\n/).filter(Boolean);
-      const rows=lines.map((line,i)=>{const parts=line.split(',').map(x=>x.trim());if(parts.length!==2)throw new Error(`CSV line ${i+1}: expected team_name,player_name`);return parts;});
-      if(rows[0]?.[0].toLowerCase()==='team_name')rows.shift();
-      if(!rows.length)throw new Error('CSV is empty');
-      const teamNames=new Map(teamsData.rows.map(t=>[t.name.toLowerCase(),t]));
-      const playerNames=new Map(playersData.rows.map(p=>[`${p.first_name} ${p.last_name}`.toLowerCase(),p]));
-      const assignments=rows.map(([teamName,playerName],i)=>{const team=teamNames.get(teamName.toLowerCase());const player=playerNames.get(playerName.toLowerCase());if(!team||!player)throw new Error(`CSV row ${i+1}: team or player not found. Import new teams/players in Team/Player pages first.`);return [team.id,player.id] as const;});
-      for(const teamId of [...new Set(assignments.map(x=>x[0]))])await registerTeam(teamId);
-      for(const [teamId,playerId] of assignments)await registerPlayer(teamId,playerId);
-      await reloadRegistrations();setRulesNotice(`${assignments.length} team/player assignments imported.`);
+      const lines=bulkCsv.replace(/^\uFEFF/,'').trim().split(/\r?\n/).filter(Boolean);
+      const parsed=lines.map((line,i)=>{
+        const parts=line.split(',').map(x=>x.trim().replace(/^"|"$/g,''));
+        if(parts.length!==2||!parts[0]||!parts[1])throw new Error(`CSV line ${i+1}: expected non-empty team_name,player_name.`);
+        return parts;
+      });
+      const rows=parsed[0]?.[0].toLowerCase()==='team_name'&&parsed[0]?.[1].toLowerCase()==='player_name'?parsed.slice(1):parsed;
+      if(!rows.length)throw new Error('CSV is empty.');
+      if(rows.length>2000)throw new Error('Import a maximum of 2,000 rows at a time.');
+      const payload=rows.map(([team_name,player_name])=>({team_name,player_name}));
+      const {data,error}=await supabase.rpc('bulk_import_competition_roster',{p_competition_id:activeCompetition.id,p_rows:payload});
+      if(error)throw error;
+      await Promise.all([reloadRegistrations(),teamsData.reload(),playersData.reload()]);
+      const result=data as {teams_created?:number;players_created?:number;assignments?:number}|null;
+      setRulesNotice(`Imported ${result?.assignments??rows.length} assignments. Created ${result?.teams_created??0} teams and ${result?.players_created??0} players.`);
     }catch(e){setRulesError(e instanceof Error?e.message:'Bulk registration failed');}
     finally{setBulkBusy(false);}
   }
@@ -287,7 +292,13 @@ export function Competition() {
     {isReadOnly&&<div className="callout">{activeCompetition?.status==='APPROVED'?'Approved competition: rules are locked; team and player registration is open until the competition starts.':'Pending owner review: details and applied rules are read-only.'}</div>}
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
     {rulesNotice && <div className="success-banner"><CheckCircle2 size={17}/>{rulesNotice}</div>}
-    {rulesError && <div className="form-error rule-error">{rulesError}</div>}
+    <style>{`.sr-error-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}.sr-error-dialog{width:min(100%,480px);background:var(--surface,#fff);color:var(--text,#172033);border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.3);padding:22px}.sr-error-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.sr-error-dialog-head button{border:0;background:transparent;cursor:pointer;color:inherit}.sr-error-dialog p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}.sr-error-dialog-actions{display:flex;justify-content:flex-end;margin-top:20px}`}</style>
+    {rulesError && <div className="sr-error-overlay" role="presentation" onClick={()=>setRulesError('')}>
+      <div className="sr-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="sr-error-title" aria-describedby="sr-error-message" onClick={event=>event.stopPropagation()}>
+        <div className="sr-error-dialog-head"><strong id="sr-error-title">Unable to complete action</strong><button type="button" aria-label="Close error" onClick={()=>setRulesError('')}><X size={18}/></button></div>
+        <p id="sr-error-message">{rulesError}</p><div className="sr-error-dialog-actions"><Button onClick={()=>setRulesError('')}>Close</Button></div>
+      </div>
+    </div>}
     <fieldset disabled={isReadOnly} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-layout"><div className="form-main">
       <Panel title={creatingCompetition?"Create new competition":"Competition details"}><div className="field-grid">{creatingCompetition&&<div className="span-2 callout">Creating a new competition. Existing competitions are not selected or edited.</div>}{!leaguesData.loading&&leaguesData.rows.length===0&&<div className="span-2 form-error">No league exists for this organization. Create a league before creating a competition.</div>}<label className="span-2">League *<select value={leagueId} disabled={isReadOnly} onChange={e=>{setLeagueId(e.target.value);setRulesError('');}} required><option value="">Select a league (required)</option>{leaguesData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Minimum teams<input type="number" min={2} max={128} value={minTeams} onChange={e=>setMinTeams(Number(e.target.value))}/></label><label>Maximum teams<input type="number" min={2} max={128} value={maxTeams} onChange={e=>setMaxTeams(Number(e.target.value))}/></label>{competitionFormat==='SINGLE_ELIMINATION'&&<div className="span-2 callout">Bracket rules: minimum and maximum must be even. Without byes, the actual registered team count must be 2, 4, 8, 16, 32, 64 or 128. Invalid counts cannot start the competition.</div>}<label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
       {!rules&&<div className="empty-state">{defaultLoading?'Loading rule defaults from the database…':<><p>Rule defaults unavailable. {rulesError||'Try again.'}</p><Button onClick={()=>setDefaultsRetry(value=>value+1)}>Retry loading defaults</Button></>}</div>}
@@ -319,7 +330,7 @@ export function Competition() {
             <div><h4 style={{margin:'0 0 10px'}}>Registered team rosters</h4><div className="table-wrap"><table className="sr-roster"><thead><tr><th>TEAM</th><th>PLAYERS</th><th>ROSTER</th></tr></thead><tbody>{registeredTeams.length===0?<tr><td colSpan={3} className="sr-muted">No teams registered yet. Add a team or use Bulk import.</td></tr>:registeredTeams.map(t=><tr key={t.team_id}><td>{teamsData.rows.find(x=>x.id===t.team_id)?.name??'Unknown team'}</td><td>{registeredPlayers.filter(x=>x.team_id===t.team_id).length}</td><td><button type="button" className="sr-button" onClick={()=>setExpandedRoster(current=>current===t.team_id?null:t.team_id)}>{expandedRoster===t.team_id?'Hide players':'View players'} <ChevronDown size={14}/></button>{expandedRoster===t.team_id&&<div style={{marginTop:8}} className="sr-muted">{registeredPlayers.filter(x=>x.team_id===t.team_id).map(x=>{const p=playersData.rows.find(p=>p.id===x.player_id);return p?`${p.first_name} ${p.last_name}`:'Unknown player';}).join(', ')||'No players assigned'}</div>}</td></tr>)}</tbody></table></div></div>
           </div>}
           {registrationTab==='Bulk import' && <div style={{marginTop:18,display:'grid',gap:14}}>
-            <div><h4 style={{margin:'0 0 6px'}}>Bulk register existing teams & players</h4><div className="sr-muted">Upload a CSV or paste records below. Names must already exist in Team and Player management.</div></div>
+            <div><h4 style={{margin:'0 0 6px'}}>Bulk create and register teams & players</h4><div className="sr-muted">Upload a CSV or paste records below. Missing teams and players are created automatically; existing records are reused.</div></div>
             <div className="sr-actions"><div className="sr-box"><strong>Upload CSV</strong><input className="sr-file" aria-label="Choose team player CSV" type="file" accept=".csv,text/csv" disabled={activeCompetition.status!=='APPROVED'} onChange={e=>{const file=e.target.files?.[0];if(file){setCsvFileName(file.name);void file.text().then(setBulkCsv).catch(()=>setRulesError('Unable to read the selected CSV file.'));}}}/><span className="sr-muted">{csvFileName||'No file selected'}</span><button className="sr-button" type="button" onClick={()=>{const content='team_name,player_name\nNorth Falcons,Alex Cruz\nNorth Falcons,John Reyes\n';const blob=new Blob([content],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='competition_registration_template.csv';a.click();URL.revokeObjectURL(url);}}><Download size={15}/> Download CSV template</button></div><div className="sr-box"><strong>Paste CSV data</strong><textarea className="sr-csv" aria-label="Bulk team player CSV" rows={5} disabled={activeCompetition.status!=='APPROVED'} value={bulkCsv} onChange={e=>setBulkCsv(e.target.value)} placeholder={'team_name,player_name\nNorth Falcons,Alex Cruz'}/></div></div>
             <div className="sr-head"><div className="sr-muted">{Math.max(0,bulkCsv.trim().split(/\r?\n/).filter(Boolean).length-(bulkCsv.trim().toLowerCase().startsWith('team_name,')?1:0))} data rows ready to validate during import</div><Button variant="primary" disabled={activeCompetition.status!=='APPROVED'||bulkBusy||!bulkCsv.trim()} onClick={()=>void bulkRegister()}><Upload size={15}/>{bulkBusy?'Importing…':'Validate & import CSV'}</Button></div>
             <div className="sr-muted">Import checks names against existing records. Invalid rows are reported without silently creating master records. For new teams, players or photos, use Team/Player management first.</div>
@@ -448,13 +459,43 @@ function WorkspaceDirectory({ kind, onTeamSelect, onPlayerSelect }: { kind: 'tea
     </>
   );
 }
+
+// Team and Player master-data CSV imports. Competition CSV remains a separate workflow.
+function MasterBulkImport({kind,onImported}:{kind:'teams'|'players';onImported:()=>void}) {
+  const [csv,setCsv]=useState(''); const [busy,setBusy]=useState(false);
+  const [dialog,setDialog]=useState<{title:string;message:string}|null>(null);
+  const [preview,setPreview]=useState<{rows:Record<string,string>[];error:string}>({rows:[],error:''});
+  const columns=kind==='teams'?['team_name','team_code']:['player_name','team_name','jersey_number'];
+  function parse(text:string){
+    const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());
+    if(!lines.length)throw new Error('CSV file is empty.');
+    const parseLine=(line:string)=>{const result:string[]=[];let value='';let quoted=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}else if(ch===','&&!quoted){result.push(value.trim());value='';}else value+=ch;}if(quoted)throw new Error('Unclosed CSV quote.');result.push(value.trim());return result;};
+    const header=parseLine(lines[0]).map(x=>x.toLowerCase());
+    if(header.join(',')!==columns.join(','))throw new Error(`Expected CSV header: ${columns.join(',')}`);
+    if(lines.length<2||lines.length>2001)throw new Error('Provide 1 to 2000 data rows.');
+    return lines.slice(1).map((line,index)=>{const fields=parseLine(line);if(fields.length!==columns.length)throw new Error(`CSV row ${index+2}: expected ${columns.length} columns.`);const row:Record<string,string>={};columns.forEach((key,i)=>row[key]=fields[i]);if(!row[kind==='teams'?'team_name':'player_name'])throw new Error(`CSV row ${index+2}: name is required.`);if(kind==='players'&&row.jersey_number&&(!/^\d+$/.test(row.jersey_number)||Number(row.jersey_number)>99))throw new Error(`CSV row ${index+2}: jersey number must be 0–99.`);return row;});
+  }
+  function update(text:string){setCsv(text);try{setPreview({rows:parse(text),error:''});}catch(e){setPreview({rows:[],error:e instanceof Error?e.message:'Invalid CSV'});}}
+  function template(){const content=kind==='teams'?'team_name,team_code\nNorth Falcons,NF\nSouth Tigers,ST\n':'player_name,team_name,jersey_number\nAlex Cruz,North Falcons,12\nJohn Reyes,North Falcons,23\n';const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=kind==='teams'?'team_upload_template.csv':'player_upload_template.csv';a.click();URL.revokeObjectURL(url);}
+  async function submit(){setBusy(true);try{const rows=parse(csv);const workspace=await getWorkspace();const {data,error}=await supabase.rpc('bulk_import_master_directory',{p_organization_id:workspace.id,p_kind:kind,p_rows:rows});if(error)throw error;setDialog({title:'Import completed',message:`${rows.length} CSV rows processed. ${JSON.stringify(data)}`});setCsv('');setPreview({rows:[],error:''});onImported();}catch(e){setDialog({title:'Import failed',message:e instanceof Error?e.message:'Unable to import CSV.'});}finally{setBusy(false);}}
+  return <Panel title={kind==='teams'?'Bulk upload teams (CSV)':'Bulk upload players (CSV)'} action={<Upload size={17}/>}>
+    <p className="muted">{kind==='teams'?'Create or reuse organization teams. Team logos are uploaded separately.':'Create or reuse organization players. Optional team assignment requires an existing team and active season roster setup; this import creates master player records only.'}</p>
+    <div className="field-grid"><label>Choose CSV<input type="file" accept=".csv,text/csv" onChange={e=>{const file=e.target.files?.[0];if(file)void file.text().then(update).catch(()=>setDialog({title:'File error',message:'Unable to read CSV.'}));}}/></label><div><Button onClick={template}><Download size={15}/> Download {kind==='teams'?'team':'player'} template</Button></div></div>
+    <label>CSV content<textarea rows={5} style={{width:'100%',boxSizing:'border-box',fontFamily:'monospace'}} value={csv} onChange={e=>update(e.target.value)} placeholder={columns.join(',')}/></label>
+    {csv&&<div className="muted" style={{margin:'8px 0'}}>{preview.error?`Validation: ${preview.error}`:`${preview.rows.length} rows ready`}</div>}
+    {preview.rows.length>0&&<div className="table-wrap" style={{maxHeight:250,overflow:'auto'}}><table><thead><tr>{columns.map(col=><th key={col}>{col.toUpperCase()}</th>)}</tr></thead><tbody>{preview.rows.slice(0,10).map((row,i)=><tr key={i}>{columns.map(col=><td key={col}>{row[col]}</td>)}</tr>)}</tbody></table>{preview.rows.length>10&&<div className="muted">Previewing first 10 of {preview.rows.length} rows</div>}</div>}
+    <div className="form-footer"><span className="muted">Import is atomic. Existing matching records are reused.</span><Button variant="primary" disabled={busy||!preview.rows.length} onClick={()=>void submit()}>{busy?'Importing…':'Validate & import'}</Button></div>
+    {dialog&&<div role="presentation" style={{position:'fixed',inset:0,background:'rgba(15,23,42,.58)',display:'grid',placeItems:'center',zIndex:10000,padding:20}}><div role="alertdialog" aria-modal="true" aria-label={dialog.title} style={{background:'white',borderRadius:16,padding:24,width:'min(460px,100%)',boxShadow:'0 24px 70px #0004'}}><h3>{dialog.title}</h3><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{dialog.message}</p><div style={{display:'flex',justifyContent:'flex-end'}}><Button variant="primary" onClick={()=>setDialog(null)}>Close</Button></div></div></div>}
+  </Panel>;
+}
+
 export function Teams() {
   const [tab,setTab]=useState<'Summary'|'Team list'>('Summary');const [selectedTeam,setSelectedTeam]=useState<DirectoryRow|null>(null);const [refreshKey,setRefreshKey]=useState(0);
-  return <><PageTitle eyebrow="TEAM MANAGEMENT" title="Team" subtitle="Team overview, standings, and roster details for your organization."/><div className="tab-row">{(['Summary','Team list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>{setTab(value);setSelectedTeam(null);}}>{value}</button>)}</div>{tab==='Summary'?<TeamSummary/>:selectedTeam?<TeamDetails team={selectedTeam} onBack={()=>setSelectedTeam(null)}/>:<><BulkTeamLogoUpload onUploaded={()=>setRefreshKey(value=>value+1)}/><WorkspaceDirectory key={refreshKey} kind="teams" onTeamSelect={setSelectedTeam}/></>}</>;
+  return <><PageTitle eyebrow="TEAM MANAGEMENT" title="Team" subtitle="Team overview, standings, and roster details for your organization."/><div className="tab-row">{(['Summary','Team list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>{setTab(value);setSelectedTeam(null);}}>{value}</button>)}</div>{tab==='Summary'?<TeamSummary/>:selectedTeam?<TeamDetails team={selectedTeam} onBack={()=>setSelectedTeam(null)}/>:<><MasterBulkImport kind="teams" onImported={()=>setRefreshKey(value=>value+1)}/><BulkTeamLogoUpload onUploaded={()=>setRefreshKey(value=>value+1)}/><WorkspaceDirectory key={refreshKey} kind="teams" onTeamSelect={setSelectedTeam}/></>}</>;
 }
 export function Players() {
   const [tab,setTab]=useState<'Summary'|'Player list'>('Summary');const [selectedPlayer,setSelectedPlayer]=useState<DirectoryRow|null>(null);const [refreshKey,setRefreshKey]=useState(0);
-  return <><PageTitle eyebrow="PLAYER MANAGEMENT" title="Player" subtitle="Player overview, scoring leaderboard, and player directory."/><div className="tab-row">{(['Summary','Player list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>{setTab(value);setSelectedPlayer(null);}}>{value}</button>)}</div>{tab==='Summary'?<PlayerSummary/>:selectedPlayer?<PlayerDetails key={selectedPlayer.id} player={selectedPlayer} onBack={()=>setSelectedPlayer(null)}/>:<><BulkPlayerPhotoUpload onUploaded={()=>setRefreshKey(value=>value+1)}/><WorkspaceDirectory key={refreshKey} kind="players" onPlayerSelect={setSelectedPlayer}/></>}</>;
+  return <><PageTitle eyebrow="PLAYER MANAGEMENT" title="Player" subtitle="Player overview, scoring leaderboard, and player directory."/><div className="tab-row">{(['Summary','Player list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>{setTab(value);setSelectedPlayer(null);}}>{value}</button>)}</div>{tab==='Summary'?<PlayerSummary/>:selectedPlayer?<PlayerDetails key={selectedPlayer.id} player={selectedPlayer} onBack={()=>setSelectedPlayer(null)}/>:<><MasterBulkImport kind="players" onImported={()=>setRefreshKey(value=>value+1)}/><BulkPlayerPhotoUpload onUploaded={()=>setRefreshKey(value=>value+1)}/><WorkspaceDirectory key={refreshKey} kind="players" onPlayerSelect={setSelectedPlayer}/></>}</>;
 }
 
 function TeamSummary() {
