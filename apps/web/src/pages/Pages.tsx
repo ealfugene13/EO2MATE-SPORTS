@@ -88,8 +88,10 @@ export function Competition() {
   const [rulesNotice, setRulesNotice] = useState('');
   const [rulesError, setRulesError] = useState('');
   const [rules, setRules] = useState<BasketballRules | null>(null);
-  type CompetitionRow = { id: string; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; seasons?:{name:string}|null };
-  const competitionsData = useWorkspaceRows<CompetitionRow>('competitions','id,name,format,rule_settings,rule_version,season_id,created_at,seasons(name)');
+  type CompetitionRow = { id: string; league_id:string|null; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; seasons?:{name:string}|null };
+  const competitionsData = useWorkspaceRows<CompetitionRow>('competitions','id,league_id,name,format,rule_settings,rule_version,season_id,created_at,seasons(name)');
+  const leaguesData=useWorkspaceRows<{id:string;name:string}>('leagues','id,name,created_at');
+  const [leagueId,setLeagueId]=useState('');
   const seasonsData=useWorkspaceRows<{id:string;name:string;active:boolean}>('seasons','id,name,active,created_at');
   const [selectedCompetitionId,setSelectedCompetitionId]=useState('');const [creatingCompetition,setCreatingCompetition]=useState(false);
   const [competitionName, setCompetitionName] = useState('');
@@ -100,7 +102,7 @@ export function Competition() {
   useEffect(() => {
     let cancelled = false;
     if (activeCompetition) {
-      setCompetitionName(activeCompetition.name); setSeasonName(activeCompetition.seasons?.name??'');
+      setLeagueId(activeCompetition.league_id??''); setCompetitionName(activeCompetition.name); setSeasonName(activeCompetition.seasons?.name??'');
       setCompetitionFormat(activeCompetition.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN_SINGLE' : activeCompetition.format);
       setRules(activeCompetition.rule_settings);
     } else if (!competitionsData.loading) {
@@ -116,13 +118,14 @@ export function Competition() {
     if (!rules) { setRulesError('Load the basketball rule defaults from the database before saving.'); return; }
     const invalid = (Object.entries(ruleBounds) as [NumberRuleKey, [number, number]][]).find(([key, [min, max]]) => !Number.isInteger(rules[key]) || rules[key] < min || rules[key] > max);
     if (invalid) { setRulesError(`Check ${invalid[0]}: use a whole number from ${invalid[1][0]} to ${invalid[1][1]}.`); setSaved(false); return; }
+    if (!leagueId || !leaguesData.rows.some(item=>item.id===leagueId)) {setRulesError('Select a valid league before saving the competition.');return;}
     if (!competitionName.trim()||!seasonName.trim()) { setRulesError('Enter both a competition name and season name before saving.'); return; }
     setRulesError(''); setRulesNotice(''); setSaved(false);
     try {
       let seasonId=activeCompetition?.season_id??null;
       if(seasonId)await seasonsData.update(seasonId,{name:seasonName.trim()});else seasonId=await seasonsData.insert({name:seasonName.trim(),active:true});
-      if (activeCompetition) await competitionsData.update(activeCompetition.id, { name: competitionName.trim(), format: competitionFormat, rule_settings: rules,season_id:seasonId });
-      else {const id=await competitionsData.insert({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, rule_version: 1,season_id:seasonId });setSelectedCompetitionId(id);setCreatingCompetition(false);}
+      if (activeCompetition) await competitionsData.update(activeCompetition.id, { name: competitionName.trim(), format: competitionFormat, rule_settings: rules,league_id:leagueId,season_id:seasonId });
+      else {const id=await competitionsData.insert({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, rule_version: 1,league_id:leagueId,season_id:seasonId });setSelectedCompetitionId(id);setCreatingCompetition(false);}
       setSaved(true);
     } catch (e) { setRulesError(e instanceof Error ? e.message : 'Unable to save the competition rule set.'); }
   }
@@ -140,13 +143,13 @@ export function Competition() {
     setRules(data as BasketballRules);
     setRulesNotice('Your personal defaults were removed and restored from the shared database defaults. The current competition changes only if you click Save rule set.');
   }
-  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Choose single or double round robin, or a single-elimination bracket. Basketball rule defaults come from the database." action={<div className="table-actions"><Button onClick={()=>{setCreatingCompetition(true);setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(null);setRulesError('');setRulesNotice('');setSaved(false);}}><Plus size={15}/>New competition</Button><Button variant="primary" onClick={()=>void saveRuleSet()} disabled={competitionsData.loading||seasonsData.loading||!rules}><Check size={16}/> Save rule set</Button></div>} />
-    <DataState loading={competitionsData.loading||seasonsData.loading} error={competitionsData.error||seasonsData.error} onRetry={() => {void competitionsData.reload();void seasonsData.reload();}}/>
+  return <><PageTitle eyebrow="LEAGUE SETUP" title="Competition & rules" subtitle="Choose single or double round robin, or a single-elimination bracket. Basketball rule defaults come from the database." action={<div className="table-actions"><Button onClick={()=>{setCreatingCompetition(true);setSelectedCompetitionId('');setLeagueId('');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(null);setRulesError('');setRulesNotice('');setSaved(false);}}><Plus size={15}/>New competition</Button><Button variant="primary" onClick={()=>void saveRuleSet()} disabled={competitionsData.loading||seasonsData.loading||leaguesData.loading||!rules||!leagueId}><Check size={16}/> Save rule set</Button></div>} />
+    <DataState loading={competitionsData.loading||seasonsData.loading||leaguesData.loading} error={competitionsData.error||seasonsData.error||leaguesData.error} onRetry={() => {void competitionsData.reload();void seasonsData.reload();void leaguesData.reload();}}/>
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
     {rulesNotice && <div className="success-banner"><CheckCircle2 size={17}/>{rulesNotice}</div>}
     {rulesError && <div className="form-error rule-error">{rulesError}</div>}
     <div className="form-layout"><div className="form-main">
-      <Panel title="Competition details"><div className="field-grid">{competitionsData.rows.length>0&&!creatingCompetition&&<label className="span-2">Competition<select value={activeCompetition?.id??''} onChange={e=>{setSelectedCompetitionId(e.target.value);setCreatingCompetition(false);}}>{competitionsData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}<label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
+      <Panel title={creatingCompetition?"Create new competition":"Competition details"}><div className="field-grid">{creatingCompetition&&<div className="span-2 callout">Creating a new competition. Existing competitions are not selected or edited.</div>}{!creatingCompetition&&<div className="span-2"><Button onClick={()=>{setCreatingCompetition(true);setSelectedCompetitionId('');setLeagueId('');setCompetitionName('');setSeasonName('');setRules(null);setSaved(false);}}>Create new instead</Button></div>}{!leaguesData.loading&&leaguesData.rows.length===0&&<div className="span-2 callout">No league exists for this organization. Create a league before creating a competition.</div>}<label className="span-2">League *<select value={leagueId} disabled={!creatingCompetition&&!!activeCompetition} onChange={e=>setLeagueId(e.target.value)} required><option value="">Select a league</option>{leaguesData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>{competitionsData.rows.length>0&&!creatingCompetition&&<label className="span-2">Competition<select value={activeCompetition?.id??''} onChange={e=>{setSelectedCompetitionId(e.target.value);setCreatingCompetition(false);}}>{competitionsData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}<label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
       {!rules&&<div className="empty-state">Loading rule defaults from the database…</div>}
       {rules&&<><Panel title="Game format"><div className="field-grid"><label>Format<input value="5 on 5 basketball" readOnly/></label>{numberField('periodLengthMinutes','Quarter length (minutes)')}{numberField('overtimeMinutes','Overtime length (minutes)')}</div></Panel>
       <Panel title="Timeout rules"><div className="field-grid">{numberField('firstHalfTimeouts','Timeouts · first half (Q1–Q2)')}{numberField('secondHalfTimeouts','Timeouts · second half (Q3–Q4)')}{numberField('fourthQuarterTimeoutRestrictionMinutes','Q4 timeout restriction window (minutes)')}{numberField('finalTwoMinuteTimeoutMax','Maximum remaining in Q4 restriction window')}{numberField('timeoutDurationSeconds','Timeout duration (seconds)')}{toggleField('headCoachRequestRequired','Require Head Coach request at scorer’s table')}</div></Panel>
