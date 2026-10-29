@@ -247,9 +247,24 @@ export function Competition() {
     const {error}=await supabase.rpc('register_competition_player',{p_competition_id:activeCompetition.id,p_team_id:teamId,p_player_id:playerId});
     if(error)throw error;
   }
+  function describeBulkImportError(error:unknown):{reason:string;details:string;resolution:string;code:string}{
+    const e=error as {message?:string;details?:string;hint?:string;code?:string}|null;
+    const message=e?.message|| (error instanceof Error?error.message:'Unexpected error during roster import.');
+    const details=e?.details||'';
+    const hint=e?.hint||'';
+    const code=e?.code||'';
+    const combined=[message,details,hint,code].join(' ');
+    if(/PGRST202|42883|could not find the function|function .* does not exist|schema cache/i.test(combined))return {reason:'The bulk roster import database function is unavailable.',details:message,resolution:'Apply migration 0017_competition_bulk_create.sql to the connected Supabase project. Then refresh the page and retry.',code};
+    if(/42501|permission denied|not authorized|row.level security|policy/i.test(combined))return {reason:'Your account does not have permission to import this roster.',details:message,resolution:'Confirm you are an organization Owner or Admin, and verify the database function grants and organization access.',code};
+    if(/CSV row|CSV line|CSV must|invalid team|invalid player|duplicate|already assigned|exceeds competition/i.test(combined))return {reason:message,details:details||'The CSV failed a roster validation check.',resolution:'Correct the indicated row or competition settings and retry. No records should be committed when the database transaction fails.',code};
+    if(/23502|23503|23505|23514|constraint|null value|foreign key/i.test(combined))return {reason:'The database rejected a team, player, or competition record.',details:message+(details?' — '+details:''),resolution:'Check the database constraint and confirm migrations 0017 and 0018 are deployed. Share the error code with the administrator.',code};
+    if(/fetch|network|timeout|Failed to fetch/i.test(combined))return {reason:'Could not reach the database service.',details:message,resolution:'Check your connection and Supabase service availability, then retry.',code};
+    return {reason:message,details:details||hint||'The database did not provide additional diagnostic details.',resolution:'Verify migrations 0017 and 0018, your organization permissions, and the Supabase function logs. Copy the diagnostic details for investigation.',code};
+  }
+  const [importFailure,setImportFailure]=useState<{reason:string;details:string;resolution:string;code:string}|null>(null);
   async function bulkRegister(){
     if(!activeCompetition)return;
-    setBulkBusy(true);setRulesError('');setRulesNotice('');
+    setBulkBusy(true);setRulesError('');setImportFailure(null);setRulesNotice('');
     try{
       const lines=bulkCsv.replace(/^\uFEFF/,'').trim().split(/\r?\n/).filter(Boolean);
       const parsed=lines.map((line,i)=>{
@@ -266,7 +281,7 @@ export function Competition() {
       await Promise.all([reloadRegistrations(),teamsData.reload(),playersData.reload()]);
       const result=data as {teams_created?:number;players_created?:number;assignments?:number}|null;
       setRulesNotice(`Imported ${result?.assignments??rows.length} assignments. Created ${result?.teams_created??0} teams and ${result?.players_created??0} players.`);
-    }catch(e){setRulesError(e instanceof Error?e.message:'Bulk registration failed');}
+    }catch(e){setImportFailure(describeBulkImportError(e));}
     finally{setBulkBusy(false);}
   }
   async function startCompetition(){
@@ -292,11 +307,13 @@ export function Competition() {
     {isReadOnly&&<div className="callout">{activeCompetition?.status==='APPROVED'?'Approved competition: rules are locked; team and player registration is open until the competition starts.':'Pending owner review: details and applied rules are read-only.'}</div>}
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
     {rulesNotice && <div className="success-banner"><CheckCircle2 size={17}/>{rulesNotice}</div>}
-    <style>{`.sr-error-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}.sr-error-dialog{width:min(100%,480px);background:var(--surface,#fff);color:var(--text,#172033);border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.3);padding:22px}.sr-error-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.sr-error-dialog-head button{border:0;background:transparent;cursor:pointer;color:inherit}.sr-error-dialog p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}.sr-error-dialog-actions{display:flex;justify-content:flex-end;margin-top:20px}`}</style>
-    {rulesError && <div className="sr-error-overlay" role="presentation" onClick={()=>setRulesError('')}>
+    <style>{`.sr-error-overlay{position:fixed;inset:0;background:rgba(12,19,35,.70);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}.sr-error-dialog{width:min(100%,590px);max-height:85vh;overflow:auto;background:#fff;color:#172033;border:1px solid #fecaca;border-top:6px solid #dc2626;border-radius:16px;box-shadow:0 25px 85px rgba(0,0,0,.38);padding:24px}.sr-error-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:14px}.sr-error-dialog-head button{border:0;background:transparent;cursor:pointer;color:#64748b}.sr-error-heading{display:flex;align-items:center;gap:12px;color:#991b1b;font-size:19px}.sr-error-symbol{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#fee2e2;color:#b91c1c;font-size:24px;font-weight:800}.sr-error-reason{margin-top:18px;font-weight:650;line-height:1.55;overflow-wrap:anywhere}.sr-error-label{font-size:11px;font-weight:800;letter-spacing:.07em;color:#7f1d1d;margin:16px 0 5px}.sr-error-detail{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff7f7;border:1px solid #fecaca;border-radius:9px;padding:12px;font-size:13px;line-height:1.55}.sr-error-next{background:#f8fafc;border-radius:9px;padding:12px;line-height:1.55;font-size:13px}.sr-error-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}.sr-error-code{font-size:12px;color:#64748b;margin-top:8px}`}</style>
+    {(rulesError||importFailure) && <div className="sr-error-overlay" role="presentation" onClick={()=>{setRulesError('');setImportFailure(null);}}>
       <div className="sr-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="sr-error-title" aria-describedby="sr-error-message" onClick={event=>event.stopPropagation()}>
-        <div className="sr-error-dialog-head"><strong id="sr-error-title">Unable to complete action</strong><button type="button" aria-label="Close error" onClick={()=>setRulesError('')}><X size={18}/></button></div>
-        <p id="sr-error-message">{rulesError}</p><div className="sr-error-dialog-actions"><Button onClick={()=>setRulesError('')}>Close</Button></div>
+        <div className="sr-error-dialog-head"><div className="sr-error-heading"><span className="sr-error-symbol" aria-hidden="true">!</span><strong id="sr-error-title">{importFailure?'Bulk import failed':'Action failed'}</strong></div><button type="button" aria-label="Close error" onClick={()=>{setRulesError('');setImportFailure(null);}}><X size={20}/></button></div>
+        <div id="sr-error-message" className="sr-error-reason">{importFailure?.reason||rulesError}</div>
+        {importFailure&&<><div className="sr-error-label">TECHNICAL DETAILS</div><div className="sr-error-detail">{importFailure.details}</div>{importFailure.code&&<div className="sr-error-code">Database error code: {importFailure.code}</div>}<div className="sr-error-label">WHAT TO DO NEXT</div><div className="sr-error-next">{importFailure.resolution}</div></>}
+        <div className="sr-error-dialog-actions">{importFailure&&<Button onClick={()=>{const content=[importFailure.reason,importFailure.details,importFailure.code,importFailure.resolution].filter(Boolean).join('\n');void navigator.clipboard.writeText(content).catch(()=>{});}}>Copy error details</Button>}<Button variant="primary" onClick={()=>{setRulesError('');setImportFailure(null);}}>Close</Button></div>
       </div>
     </div>}
     <fieldset disabled={isReadOnly} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-layout"><div className="form-main">
@@ -333,7 +350,7 @@ export function Competition() {
             <div><h4 style={{margin:'0 0 6px'}}>Bulk create and register teams & players</h4><div className="sr-muted">Upload a CSV or paste records below. Missing teams and players are created automatically; existing records are reused.</div></div>
             <div className="sr-actions"><div className="sr-box"><strong>Upload CSV</strong><input className="sr-file" aria-label="Choose team player CSV" type="file" accept=".csv,text/csv" disabled={activeCompetition.status!=='APPROVED'} onChange={e=>{const file=e.target.files?.[0];if(file){setCsvFileName(file.name);void file.text().then(setBulkCsv).catch(()=>setRulesError('Unable to read the selected CSV file.'));}}}/><span className="sr-muted">{csvFileName||'No file selected'}</span><button className="sr-button" type="button" onClick={()=>{const content='team_name,player_name\nNorth Falcons,Alex Cruz\nNorth Falcons,John Reyes\n';const blob=new Blob([content],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='competition_registration_template.csv';a.click();URL.revokeObjectURL(url);}}><Download size={15}/> Download CSV template</button></div><div className="sr-box"><strong>Paste CSV data</strong><textarea className="sr-csv" aria-label="Bulk team player CSV" rows={5} disabled={activeCompetition.status!=='APPROVED'} value={bulkCsv} onChange={e=>setBulkCsv(e.target.value)} placeholder={'team_name,player_name\nNorth Falcons,Alex Cruz'}/></div></div>
             <div className="sr-head"><div className="sr-muted">{Math.max(0,bulkCsv.trim().split(/\r?\n/).filter(Boolean).length-(bulkCsv.trim().toLowerCase().startsWith('team_name,')?1:0))} data rows ready to validate during import</div><Button variant="primary" disabled={activeCompetition.status!=='APPROVED'||bulkBusy||!bulkCsv.trim()} onClick={()=>void bulkRegister()}><Upload size={15}/>{bulkBusy?'Importing…':'Validate & import CSV'}</Button></div>
-            <div className="sr-muted">Import checks names against existing records. Invalid rows are reported without silently creating master records. For new teams, players or photos, use Team/Player management first.</div>
+            <div className="sr-muted">This import creates missing teams and players, reuses existing records, and registers the roster to this competition. Team logos and player photos are uploaded separately in Team/Player Management.</div>
           </div>}
           {registrationTab==='Fixtures & bracket' && <div style={{marginTop:18}}>{matches.length===0?<div className="sr-notice">No fixtures yet. Register eligible teams and start the competition to generate matches.</div>:<div className="table-wrap"><table className="sr-roster"><thead><tr><th>ROUND</th><th>MATCH</th><th>HOME</th><th>AWAY</th><th>STATUS</th></tr></thead><tbody>{matches.map(m=><tr key={m.id}><td>{m.round_no}</td><td>{m.slot_no}</td><td>{teamsData.rows.find(t=>t.id===m.home_team_id)?.name??'TBD'}</td><td>{teamsData.rows.find(t=>t.id===m.away_team_id)?.name??'TBD'}</td><td>{m.status}</td></tr>)}</tbody></table></div>}</div>}
         </div>
