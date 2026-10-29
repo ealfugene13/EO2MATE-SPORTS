@@ -3,12 +3,13 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { getWorkspace } from '../lib/workspaceData';
 import { supabase, configured } from '../lib/supabase';
 import {
-  Bell, ChevronDown, LayoutDashboard, LogOut, Menu, Search, Settings2, ShieldCheck, Trophy, UserRound, Users,
+  Bell, CalendarDays, ChevronDown, LayoutDashboard, LogOut, Menu, Search, Settings2, ShieldCheck, Trophy, UserRound, Users,
 } from 'lucide-react';
 
 const navigation = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/league', label: 'League', icon: Trophy },
+  { to: '/competition', label: 'Competition', icon: CalendarDays },
   { to: '/teams', label: 'Team', icon: Users },
   { to: '/players', label: 'Player', icon: UserRound },
   { to: '/games', label: 'Games', icon: ShieldCheck },
