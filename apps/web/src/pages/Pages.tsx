@@ -603,11 +603,36 @@ function TeamDetails({team,onBack}:{team:DirectoryRow;onBack:()=>void}) {
 }
 
 function PlayerSummary() {
-  type Player={id:string;first_name:string;last_name:string;active:boolean};type Event={id:string;player_id:string|null;event_type:string;points:number;reversed_event_id:string|null};
-  const players=useWorkspaceRows<Player>('players','id,first_name,last_name,active,created_at');const events=useWorkspaceRows<Event>('game_events','id,player_id,event_type,points,reversed_event_id,created_at');
-  const reversed=new Set(events.rows.map(event=>event.reversed_event_id).filter(Boolean));const valid=events.rows.filter(event=>event.event_type!=='REVERSAL'&&!reversed.has(event.id));
-  const leaderboard=players.rows.map(player=>{const mine=valid.filter(event=>event.player_id===player.id);return {...player,points:mine.reduce((sum,event)=>sum+event.points,0),rebounds:mine.filter(event=>event.event_type.startsWith('REBOUND_')).length,assists:mine.filter(event=>event.event_type==='ASSIST').length,steals:mine.filter(event=>event.event_type==='STEAL').length};}).sort((a,b)=>b.points-a.points).slice(0,10);
-  return <><DataState loading={players.loading||events.loading} error={players.error||events.error} onRetry={()=>{void players.reload();void events.reload();}}/><div className="metrics-grid"><Metric label="PLAYERS" value={String(players.rows.filter(player=>player.active).length)} note="Active profiles" icon={UserRound}/><Metric label="SCORING EVENTS" value={String(valid.filter(event=>event.points>0).length)} note="Saved game events" icon={Activity} tone="orange"/><Metric label="ASSISTS" value={String(valid.filter(event=>event.event_type==='ASSIST').length)} note="Across recorded games" icon={Award} tone="purple"/><Metric label="REBOUNDS" value={String(valid.filter(event=>event.event_type.startsWith('REBOUND_')).length)} note="Across recorded games" icon={Users} tone="green"/></div><Panel title="Player stat leaderboard"><div className="table-wrap"><table><thead><tr><th>RANK</th><th>PLAYER</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th></tr></thead><tbody>{leaderboard.map((player,index)=><tr key={player.id}><td>{index+1}</td><td>{player.first_name} {player.last_name}</td><td><b>{player.points}</b></td><td>{player.rebounds}</td><td>{player.assists}</td><td>{player.steals}</td></tr>)}</tbody></table>{!players.loading&&!leaderboard.length&&<div className="empty-state">Recorded game events will build the player leaderboard.</div>}</div></Panel></>;
+  type Player={id:string;first_name:string;last_name:string;active:boolean};
+  type Event={id:string;game_id:string;player_id:string|null;event_type:string;points:number;reversed_event_id:string|null};
+  type StatGame={id:string;competition_id:string|null;status:string};
+  type StatCompetition={id:string;league_id:string|null;name:string};
+  type StatLeague={id:string;name:string};
+  const players=useWorkspaceRows<Player>('players','id,first_name,last_name,active,created_at');
+  const events=useWorkspaceRows<Event>('game_events','id,game_id,player_id,event_type,points,reversed_event_id,created_at');
+  const games=useWorkspaceRows<StatGame>('games','id,competition_id,status,created_at');
+  const competitions=useWorkspaceRows<StatCompetition>('competitions','id,league_id,name,created_at');
+  const leagues=useWorkspaceRows<StatLeague>('leagues','id,name,created_at');
+  const [scope,setScope]=useState<'ORGANIZATION'|'LEAGUE'|'COMPETITION'>('ORGANIZATION');
+  const [leagueId,setLeagueId]=useState('');
+  const [competitionId,setCompetitionId]=useState('');
+  const selectedLeagueCompetitions=competitions.rows.filter(c=>c.league_id===leagueId);
+  const eligibleGames=new Set(games.rows.filter(g=>g.status==='FINAL'&&(scope==='ORGANIZATION'||(scope==='LEAGUE'&&!!leagueId&&!!g.competition_id&&selectedLeagueCompetitions.some(c=>c.id===g.competition_id))||(scope==='COMPETITION'&&!!competitionId&&g.competition_id===competitionId))).map(g=>g.id));
+  const reversed=new Set(events.rows.map(event=>event.reversed_event_id).filter(Boolean));
+  const valid=events.rows.filter(event=>eligibleGames.has(event.game_id)&&event.event_type!=='REVERSAL'&&!reversed.has(event.id));
+  const leaderboard=players.rows.map(player=>{const mine=valid.filter(event=>event.player_id===player.id);return {...player,points:mine.reduce((sum,event)=>sum+Number(event.points||0),0),rebounds:mine.filter(event=>event.event_type.startsWith('REBOUND_')).length,assists:mine.filter(event=>event.event_type==='ASSIST').length,steals:mine.filter(event=>event.event_type==='STEAL').length,blocks:mine.filter(event=>event.event_type==='BLOCK').length,gp:new Set(mine.map(event=>event.game_id)).size};}).filter(p=>p.gp>0).sort((a,b)=>b.points-a.points||b.rebounds-a.rebounds).slice(0,50);
+  const loading=players.loading||events.loading||games.loading||competitions.loading||leagues.loading;
+  const error=players.error||events.error||games.error||competitions.error||leagues.error;
+  return <>
+    <DataState loading={loading} error={error} onRetry={()=>{void players.reload();void events.reload();void games.reload();void competitions.reload();void leagues.reload();}}/>
+    <Panel title="Player statistics scope"><div className="field-grid">
+      <label>Statistics level<select value={scope} onChange={e=>{setScope(e.target.value as typeof scope);setLeagueId('');setCompetitionId('');}}><option value="ORGANIZATION">Organization</option><option value="LEAGUE">League</option><option value="COMPETITION">Competition</option></select></label>
+      {scope==='LEAGUE'&&<label>League<select value={leagueId} onChange={e=>setLeagueId(e.target.value)}><option value="">Select a league</option>{leagues.rows.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>}
+      {scope==='COMPETITION'&&<label>Competition<select value={competitionId} onChange={e=>setCompetitionId(e.target.value)}><option value="">Select a competition</option>{competitions.rows.map(c=><option key={c.id} value={c.id}>{c.name} ({leagues.rows.find(l=>l.id===c.league_id)?.name??'Unassigned league'})</option>)}</select></label>}
+    </div><div className="rule-help">{scope==='ORGANIZATION'?'Organization totals: all finalized games in this organization only.':scope==='LEAGUE'?'League totals: finalized games in competitions of the selected league only.':'Competition totals: finalized games in the selected competition only.'} Reversed events and unfinished games are excluded. Players without official events are not ranked.</div></Panel>
+    <div className="metrics-grid"><Metric label="RANKED PLAYERS" value={String(leaderboard.length)} note="Players with recorded events (top 50)" icon={UserRound}/><Metric label="FINAL GAMES" value={String(eligibleGames.size)} note="Selected scope" icon={Activity} tone="orange"/><Metric label="ASSISTS" value={String(valid.filter(event=>event.event_type==='ASSIST').length)} note="Selected scope" icon={Award} tone="purple"/><Metric label="REBOUNDS" value={String(valid.filter(event=>event.event_type.startsWith('REBOUND_')).length)} note="Selected scope" icon={Users} tone="green"/></div>
+    <Panel title="Player stat leaderboard"><div className="table-wrap"><table><thead><tr><th>RANK</th><th>PLAYER</th><th>GP*</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th></tr></thead><tbody>{leaderboard.map((player,index)=><tr key={player.id}><td>{index+1}</td><td>{player.first_name} {player.last_name}</td><td>{player.gp}</td><td><b>{player.points}</b></td><td>{player.rebounds}</td><td>{player.assists}</td><td>{player.steals}</td><td>{player.blocks}</td></tr>)}</tbody></table>{!loading&&!leaderboard.length&&<div className="empty-state">No finalized games with recorded player events in this scope.</div>}</div><div className="rule-help">*GP is games with recorded player events, not an official participation count. Scope totals use unique game IDs; competitions without a league are included only at organization or competition level.</div></Panel>
+  </>;
 }
 
 function PlayerDetails({player,onBack}:{player:DirectoryRow;onBack:()=>void}) {
