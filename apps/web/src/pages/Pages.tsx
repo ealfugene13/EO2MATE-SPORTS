@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Activity, ArrowDownToLine, ArrowRight, Award, CalendarDays, Check, CheckCircle2,
+  AlertTriangle, Activity, ArrowDownToLine, ArrowRight, Award, CalendarDays, Check, CheckCircle2,
   ChevronDown, CircleHelp, Clock3, Download, Ellipsis, Filter, Flag, Plus, Radio,
   Search, ShieldCheck, Sparkles, Trophy, Undo2, Users, UserRound, Wifi, WifiOff,
   ArrowLeftRight, ImagePlus, Pause, Play, Upload, X,
@@ -131,6 +131,7 @@ export function Competition() {
   const [busy,setBusy]=useState(false);
   const [saved, setSaved] = useState(false);
   const [rulesNotice, setRulesNotice] = useState('');
+  const [importSuccess,setImportSuccess]=useState<{assignments:number;teamsCreated:number;playersCreated:number}|null>(null);
   const [rulesError, setRulesError] = useState('');
   const [rules, setRules] = useState<BasketballRules | null>(null);
   type CompetitionRow = { id: string; league_id:string|null; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; status:'DRAFT'|'PENDING_REVIEW'|'APPROVED'|'ACTIVE'|'COMPLETED'; min_teams:number;max_teams:number; created_at:string; seasons?:{name:string}|null };
@@ -264,7 +265,7 @@ export function Competition() {
   const [importFailure,setImportFailure]=useState<{reason:string;details:string;resolution:string;code:string}|null>(null);
   async function bulkRegister(){
     if(!activeCompetition)return;
-    setBulkBusy(true);setRulesError('');setImportFailure(null);setRulesNotice('');
+    setBulkBusy(true);setRulesError('');setImportFailure(null);setImportSuccess(null);setRulesNotice('');
     try{
       const lines=bulkCsv.replace(/^\uFEFF/,'').trim().split(/\r?\n/).filter(Boolean);
       const parsed=lines.map((line,i)=>{
@@ -280,7 +281,7 @@ export function Competition() {
       if(error)throw error;
       await Promise.all([reloadRegistrations(),teamsData.reload(),playersData.reload()]);
       const result=data as {teams_created?:number;players_created?:number;assignments?:number}|null;
-      setRulesNotice(`Imported ${result?.assignments??rows.length} assignments. Created ${result?.teams_created??0} teams and ${result?.players_created??0} players.`);
+      setImportSuccess({assignments:result?.assignments??rows.length,teamsCreated:result?.teams_created??0,playersCreated:result?.players_created??0});
     }catch(e){setImportFailure(describeBulkImportError(e));}
     finally{setBulkBusy(false);}
   }
@@ -292,7 +293,12 @@ export function Competition() {
     finally{setBusy(false);}
   }
   const bracketCountInvalid=!!activeCompetition && activeCompetition.format==='SINGLE_ELIMINATION' && (registeredTeams.length<2 || (registeredTeams.length & (registeredTeams.length-1))!==0);
-  const bracketCountMessage=bracketCountInvalid ? `Single-elimination brackets require 2, 4, 8, 16, 32, 64 or 128 teams (no byes). Currently registered: ${registeredTeams.length}.` : '';
+  const bracketTargetLow=registeredTeams.length>=2 ? 2**Math.floor(Math.log2(registeredTeams.length)) : 2;
+  const bracketTargetHigh=registeredTeams.length>=2 ? 2**Math.ceil(Math.log2(registeredTeams.length)) : 2;
+  const bracketCountMessage=bracketCountInvalid ? `Registered: ${registeredTeams.length}. This single-elimination scheduler does not support byes. ${bracketTargetLow===bracketTargetHigh?`Register ${bracketTargetHigh} teams.`:`Use ${bracketTargetLow} teams (remove ${registeredTeams.length-bracketTargetLow}) or ${bracketTargetHigh} teams (add ${bracketTargetHigh-registeredTeams.length}).`} Team registrations can be changed while APPROVED; approved rules cannot be edited.` : '';
+  const teamLimitInvalid=!!activeCompetition&&(registeredTeams.length<activeCompetition.min_teams||registeredTeams.length>activeCompetition.max_teams);
+  const startOwnerOnly=competitionsData.workspace?.role!=='OWNER';
+  const startBlockedReasons=[...(teamLimitInvalid&&activeCompetition?[`Team count must be between ${activeCompetition.min_teams} and ${activeCompetition.max_teams}.`]:[]),...(bracketCountInvalid?[bracketCountMessage]:[]),...(startOwnerOnly?['Only the organization OWNER can start this competition.']:[])];
   const total=competitionsData.rows.length;
   const draftCount=competitionsData.rows.filter(row=>row.status==='DRAFT').length;
   const reviewCount=competitionsData.rows.filter(row=>row.status==='PENDING_REVIEW').length;
@@ -308,6 +314,17 @@ export function Competition() {
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
     {rulesNotice && <div className="success-banner"><CheckCircle2 size={17}/>{rulesNotice}</div>}
     <style>{`.sr-error-overlay{position:fixed;inset:0;background:rgba(12,19,35,.70);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}.sr-error-dialog{width:min(100%,590px);max-height:85vh;overflow:auto;background:#fff;color:#172033;border:1px solid #fecaca;border-top:6px solid #dc2626;border-radius:16px;box-shadow:0 25px 85px rgba(0,0,0,.38);padding:24px}.sr-error-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:14px}.sr-error-dialog-head button{border:0;background:transparent;cursor:pointer;color:#64748b}.sr-error-heading{display:flex;align-items:center;gap:12px;color:#991b1b;font-size:19px}.sr-error-symbol{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#fee2e2;color:#b91c1c;font-size:24px;font-weight:800}.sr-error-reason{margin-top:18px;font-weight:650;line-height:1.55;overflow-wrap:anywhere}.sr-error-label{font-size:11px;font-weight:800;letter-spacing:.07em;color:#7f1d1d;margin:16px 0 5px}.sr-error-detail{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff7f7;border:1px solid #fecaca;border-radius:9px;padding:12px;font-size:13px;line-height:1.55}.sr-error-next{background:#f8fafc;border-radius:9px;padding:12px;line-height:1.55;font-size:13px}.sr-error-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}.sr-error-code{font-size:12px;color:#64748b;margin-top:8px}`}</style>
+    {importSuccess && <div className="sr-error-overlay" role="presentation" onClick={()=>setImportSuccess(null)}>
+      <div role="dialog" aria-modal="true" aria-labelledby="sr-success-title" onClick={event=>event.stopPropagation()} style={{width:'min(100%,520px)',background:'#fff',border:'1px solid #bbf7d0',borderTop:'6px solid #16a34a',borderRadius:16,boxShadow:'0 25px 85px rgba(0,0,0,.38)',padding:24,color:'#14532d'}}>
+        <div className="sr-error-dialog-head"><div className="sr-error-heading" style={{color:'#166534'}}><span className="sr-error-symbol" style={{background:'#dcfce7',color:'#15803d'}}>✓</span><strong id="sr-success-title">Bulk import successful</strong></div><button type="button" aria-label="Close success popup" onClick={()=>setImportSuccess(null)}><X size={20}/></button></div>
+        <p style={{color:'#334155',marginTop:18}}>The competition roster was imported successfully.</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10,marginTop:18}}>
+          {([{label:'Assignments',value:importSuccess.assignments},{label:'Teams created',value:importSuccess.teamsCreated},{label:'Players created',value:importSuccess.playersCreated}]).map(item=><div key={item.label} style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:10,padding:12,textAlign:'center'}}><strong style={{fontSize:25,display:'block'}}>{item.value}</strong><small style={{color:'#166534'}}>{item.label}</small></div>)}
+        </div>
+        <p style={{fontSize:12,color:'#64748b',marginTop:14}}>Existing matching records are reused; created counts may be zero on repeat imports.</p>
+        <div className="sr-error-dialog-actions"><Button variant="primary" onClick={()=>setImportSuccess(null)}>Done</Button></div>
+      </div>
+    </div>}
     {(rulesError||importFailure) && <div className="sr-error-overlay" role="presentation" onClick={()=>{setRulesError('');setImportFailure(null);}}>
       <div className="sr-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="sr-error-title" aria-describedby="sr-error-message" onClick={event=>event.stopPropagation()}>
         <div className="sr-error-dialog-head"><div className="sr-error-heading"><span className="sr-error-symbol" aria-hidden="true">!</span><strong id="sr-error-title">{importFailure?'Bulk import failed':'Action failed'}</strong></div><button type="button" aria-label="Close error" onClick={()=>{setRulesError('');setImportFailure(null);}}><X size={20}/></button></div>
@@ -354,7 +371,7 @@ export function Competition() {
           </div>}
           {registrationTab==='Fixtures & bracket' && <div style={{marginTop:18}}>{matches.length===0?<div className="sr-notice">No fixtures yet. Register eligible teams and start the competition to generate matches.</div>:<div className="table-wrap"><table className="sr-roster"><thead><tr><th>ROUND</th><th>MATCH</th><th>HOME</th><th>AWAY</th><th>STATUS</th></tr></thead><tbody>{matches.map(m=><tr key={m.id}><td>{m.round_no}</td><td>{m.slot_no}</td><td>{teamsData.rows.find(t=>t.id===m.home_team_id)?.name??'TBD'}</td><td>{teamsData.rows.find(t=>t.id===m.away_team_id)?.name??'TBD'}</td><td>{m.status}</td></tr>)}</tbody></table></div>}</div>}
         </div>
-        {activeCompetition.status==='APPROVED'&&<div className="sr-card"><div className="sr-head"><div><h4 style={{margin:'0 0 5px'}}>Competition readiness</h4><div className="sr-muted">Minimum {activeCompetition.min_teams}, maximum {activeCompetition.max_teams} teams. Starting generates fixtures and activates the competition.</div></div><Button variant="primary" disabled={busy||registeredTeams.length<activeCompetition.min_teams||registeredTeams.length>activeCompetition.max_teams||bracketCountInvalid} onClick={()=>void startCompetition()}><Play size={15}/> Start competition</Button></div>{bracketCountMessage&&<div className="form-error" role="alert" style={{marginTop:10}}>{bracketCountMessage}</div>}{registeredTeams.length<activeCompetition.min_teams&&<div className="sr-muted" style={{marginTop:10}}>Register {activeCompetition.min_teams-registeredTeams.length} more team(s) before starting.</div>}</div>}
+        {activeCompetition.status==='APPROVED'&&<div className="sr-card"><div className="sr-head"><div><h4 style={{margin:'0 0 5px'}}>Competition readiness</h4><div className="sr-muted">Minimum {activeCompetition.min_teams}, maximum {activeCompetition.max_teams} teams. Starting generates fixtures and activates the competition.</div></div><Button variant="primary" disabled={busy||teamLimitInvalid||bracketCountInvalid||startOwnerOnly} onClick={()=>void startCompetition()}><Play size={15}/> Start competition</Button></div>{startBlockedReasons.length>0?<div role="alert" style={{marginTop:14,padding:16,border:'1px solid #fca5a5',borderLeft:'5px solid #dc2626',borderRadius:10,background:'#fff1f2',color:'#991b1b'}}><strong style={{display:'flex',alignItems:'center',gap:8}}><AlertTriangle size={18}/> Competition cannot start yet</strong><ul style={{margin:'10px 0 0',paddingLeft:22,lineHeight:1.65}}>{startBlockedReasons.map((reason,i)=><li key={i}>{reason}</li>)}</ul><div style={{marginTop:8,fontSize:13}}>To use all 10 teams, create a new Round Robin competition and register them there; approved competition rules remain locked.</div></div>:<div style={{marginTop:12,padding:12,border:'1px solid #86efac',borderRadius:10,background:'#f0fdf4',color:'#166534'}}>Team count is eligible. The owner can start the competition and generate fixtures.</div>}</div>}
       </section>}
 </>}
   </>;
@@ -480,7 +497,7 @@ function WorkspaceDirectory({ kind, onTeamSelect, onPlayerSelect }: { kind: 'tea
 // Team and Player master-data CSV imports. Competition CSV remains a separate workflow.
 function MasterBulkImport({kind,onImported}:{kind:'teams'|'players';onImported:()=>void}) {
   const [csv,setCsv]=useState(''); const [busy,setBusy]=useState(false);
-  const [dialog,setDialog]=useState<{title:string;message:string}|null>(null);
+  const [dialog,setDialog]=useState<{title:string;message:string;success:boolean}|null>(null);
   const [preview,setPreview]=useState<{rows:Record<string,string>[];error:string}>({rows:[],error:''});
   const columns=kind==='teams'?['team_name','team_code']:['player_name','team_name','jersey_number'];
   function parse(text:string){
@@ -494,15 +511,15 @@ function MasterBulkImport({kind,onImported}:{kind:'teams'|'players';onImported:(
   }
   function update(text:string){setCsv(text);try{setPreview({rows:parse(text),error:''});}catch(e){setPreview({rows:[],error:e instanceof Error?e.message:'Invalid CSV'});}}
   function template(){const content=kind==='teams'?'team_name,team_code\nNorth Falcons,NF\nSouth Tigers,ST\n':'player_name,team_name,jersey_number\nAlex Cruz,North Falcons,12\nJohn Reyes,North Falcons,23\n';const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=kind==='teams'?'team_upload_template.csv':'player_upload_template.csv';a.click();URL.revokeObjectURL(url);}
-  async function submit(){setBusy(true);try{const rows=parse(csv);const workspace=await getWorkspace();const {data,error}=await supabase.rpc('bulk_import_master_directory',{p_organization_id:workspace.id,p_kind:kind,p_rows:rows});if(error)throw error;setDialog({title:'Import completed',message:`${rows.length} CSV rows processed. ${JSON.stringify(data)}`});setCsv('');setPreview({rows:[],error:''});onImported();}catch(e){setDialog({title:'Import failed',message:e instanceof Error?e.message:'Unable to import CSV.'});}finally{setBusy(false);}}
+  async function submit(){setBusy(true);try{const rows=parse(csv);const workspace=await getWorkspace();const {data,error}=await supabase.rpc('bulk_import_master_directory',{p_organization_id:workspace.id,p_kind:kind,p_rows:rows});if(error)throw error;setDialog({title:'Import completed',message:`${rows.length} CSV rows processed. ${JSON.stringify(data)}`,success:true});setCsv('');setPreview({rows:[],error:''});onImported();}catch(e){setDialog({title:'Import failed',message:e instanceof Error?e.message:'Unable to import CSV.',success:false});}finally{setBusy(false);}}
   return <Panel title={kind==='teams'?'Bulk upload teams (CSV)':'Bulk upload players (CSV)'} action={<Upload size={17}/>}>
     <p className="muted">{kind==='teams'?'Create or reuse organization teams. Team logos are uploaded separately.':'Create or reuse organization players. Optional team assignment requires an existing team and active season roster setup; this import creates master player records only.'}</p>
-    <div className="field-grid"><label>Choose CSV<input type="file" accept=".csv,text/csv" onChange={e=>{const file=e.target.files?.[0];if(file)void file.text().then(update).catch(()=>setDialog({title:'File error',message:'Unable to read CSV.'}));}}/></label><div><Button onClick={template}><Download size={15}/> Download {kind==='teams'?'team':'player'} template</Button></div></div>
+    <div className="field-grid"><label>Choose CSV<input type="file" accept=".csv,text/csv" onChange={e=>{const file=e.target.files?.[0];if(file)void file.text().then(update).catch(()=>setDialog({title:'File error',message:'Unable to read CSV.',success:false}));}}/></label><div><Button onClick={template}><Download size={15}/> Download {kind==='teams'?'team':'player'} template</Button></div></div>
     <label>CSV content<textarea rows={5} style={{width:'100%',boxSizing:'border-box',fontFamily:'monospace'}} value={csv} onChange={e=>update(e.target.value)} placeholder={columns.join(',')}/></label>
     {csv&&<div className="muted" style={{margin:'8px 0'}}>{preview.error?`Validation: ${preview.error}`:`${preview.rows.length} rows ready`}</div>}
     {preview.rows.length>0&&<div className="table-wrap" style={{maxHeight:250,overflow:'auto'}}><table><thead><tr>{columns.map(col=><th key={col}>{col.toUpperCase()}</th>)}</tr></thead><tbody>{preview.rows.slice(0,10).map((row,i)=><tr key={i}>{columns.map(col=><td key={col}>{row[col]}</td>)}</tr>)}</tbody></table>{preview.rows.length>10&&<div className="muted">Previewing first 10 of {preview.rows.length} rows</div>}</div>}
     <div className="form-footer"><span className="muted">Import is atomic. Existing matching records are reused.</span><Button variant="primary" disabled={busy||!preview.rows.length} onClick={()=>void submit()}>{busy?'Importing…':'Validate & import'}</Button></div>
-    {dialog&&<div role="presentation" style={{position:'fixed',inset:0,background:'rgba(15,23,42,.58)',display:'grid',placeItems:'center',zIndex:10000,padding:20}}><div role="alertdialog" aria-modal="true" aria-label={dialog.title} style={{background:'white',borderRadius:16,padding:24,width:'min(460px,100%)',boxShadow:'0 24px 70px #0004'}}><h3>{dialog.title}</h3><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{dialog.message}</p><div style={{display:'flex',justifyContent:'flex-end'}}><Button variant="primary" onClick={()=>setDialog(null)}>Close</Button></div></div></div>}
+    {dialog&&<div role="presentation" style={{position:'fixed',inset:0,background:'rgba(15,23,42,.58)',display:'grid',placeItems:'center',zIndex:10000,padding:20}}><div role={dialog.success?'dialog':'alertdialog'} aria-modal="true" aria-label={dialog.title} style={{background:'white',borderRadius:16,padding:24,width:'min(460px,100%)',borderTop:`6px solid ${dialog.success?'#16a34a':'#dc2626'}`,boxShadow:'0 24px 70px #0004'}}><h3 style={{color:dialog.success?'#166534':'#991b1b'}}>{dialog.success?'✓ ':'! '}{dialog.title}</h3><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{dialog.message}</p><div style={{display:'flex',justifyContent:'flex-end'}}><Button variant="primary" onClick={()=>setDialog(null)}>Close</Button></div></div></div>}
   </Panel>;
 }
 
