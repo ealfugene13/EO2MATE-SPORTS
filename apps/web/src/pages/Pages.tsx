@@ -130,8 +130,8 @@ export function Competition() {
   const [rulesNotice, setRulesNotice] = useState('');
   const [rulesError, setRulesError] = useState('');
   const [rules, setRules] = useState<BasketballRules | null>(null);
-  type CompetitionRow = { id: string; league_id:string|null; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; status:'DRAFT'|'PENDING_REVIEW'|'APPROVED'; created_at:string; seasons?:{name:string}|null };
-  const competitionsData = useWorkspaceRows<CompetitionRow>('competitions','id,league_id,name,format,rule_settings,rule_version,season_id,status,created_at,seasons(name)');
+  type CompetitionRow = { id: string; league_id:string|null; name: string; format: string; rule_settings: BasketballRules; rule_version: number; season_id:string|null; status:'DRAFT'|'PENDING_REVIEW'|'APPROVED'|'ACTIVE'|'COMPLETED'; min_teams:number;max_teams:number; created_at:string; seasons?:{name:string}|null };
+  const competitionsData = useWorkspaceRows<CompetitionRow>('competitions','id,league_id,name,format,rule_settings,rule_version,season_id,status,min_teams,max_teams,created_at,seasons(name)');
   const leaguesData=useWorkspaceRows<{id:string;name:string}>('leagues','id,name,created_at');
   const [leagueId,setLeagueId]=useState('');
   const seasonsData=useWorkspaceRows<{id:string;name:string;active:boolean}>('seasons','id,name,active,created_at');
@@ -139,6 +139,15 @@ export function Competition() {
   const [competitionName, setCompetitionName] = useState('');
   const [seasonName,setSeasonName]=useState('');
   const [competitionFormat, setCompetitionFormat] = useState('ROUND_ROBIN_SINGLE');
+  const [minTeams,setMinTeams]=useState(2); const [maxTeams,setMaxTeams]=useState(64);
+  const [defaultLoading,setDefaultLoading]=useState(false);
+  const [registeredTeams,setRegisteredTeams]=useState<{team_id:string}[]>([]);
+  const [registeredPlayers,setRegisteredPlayers]=useState<{team_id:string;player_id:string}[]>([]);
+  const [selectedTeam,setSelectedTeam]=useState(''); const [selectedPlayer,setSelectedPlayer]=useState('');
+  const [bulkCsv,setBulkCsv]=useState(''); const [bulkBusy,setBulkBusy]=useState(false);
+  const [matches,setMatches]=useState<{id:string;round_no:number;slot_no:number;home_team_id:string|null;away_team_id:string|null;status:string}[]>([]);
+  const teamsData=useWorkspaceRows<{id:string;name:string;active:boolean}>('teams','id,name,active');
+  const playersData=useWorkspaceRows<{id:string;first_name:string;last_name:string;active:boolean}>('players','id,first_name,last_name,active');
   const activeCompetition = creatingCompetition?undefined:(competitionsData.rows.find(row=>row.id===selectedCompetitionId)??competitionsData.rows[0]);
   const isReadOnly=!!activeCompetition&&activeCompetition.status!=='DRAFT';
   const leagueName=(id:string|null)=>leaguesData.rows.find(row=>row.id===id)?.name??'Unassigned league';
@@ -150,7 +159,7 @@ export function Competition() {
     if(/approved.*locked|pending.*read.only|submitted.*cannot/i.test(message))return 'This competition is under review or approved and cannot be modified.';
     return message;
   };
-  const startNew=()=>{setCreatingCompetition(true);setDetailOpen(true);setTab('Competition list');setSelectedCompetitionId('');setLeagueId('');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setRules(null);setRulesError('');setRulesNotice('');setSaved(false);};
+  const startNew=()=>{setCreatingCompetition(true);setDetailOpen(true);setTab('Competition list');setSelectedCompetitionId('');setLeagueId('');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setMinTeams(2);setMaxTeams(64);setRules(null);setRulesError('');setRulesNotice('');setSaved(false);};
   const openCompetition=(id:string)=>{setCreatingCompetition(false);setSelectedCompetitionId(id);setDetailOpen(true);setTab('Competition list');setRulesError('');setRulesNotice('');setSaved(false);};
   async function transition(status:'PENDING_REVIEW'|'APPROVED'){
     if(!activeCompetition)return; if(!activeCompetition.league_id){setRulesError('Assign a league and save this competition before submitting it for review.');return;} setBusy(true);setRulesError('');setRulesNotice('');
@@ -164,12 +173,13 @@ export function Competition() {
     let cancelled = false;
     if (activeCompetition) {
       setLeagueId(activeCompetition.league_id??''); setCompetitionName(activeCompetition.name); setSeasonName(activeCompetition.seasons?.name??'');
-      setCompetitionFormat(activeCompetition.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN_SINGLE' : activeCompetition.format);
+      setCompetitionFormat(activeCompetition.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN_SINGLE' : activeCompetition.format);setMinTeams(activeCompetition.min_teams??2);setMaxTeams(activeCompetition.max_teams??64);
       setRules(activeCompetition.rule_settings);
     } else if (!competitionsData.loading) {
-      setRules(null);
-      void getBasketballRuleDefaults().then(value => { if (!cancelled) setRules(value); })
-        .catch(error => { if (!cancelled) setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.'); });
+      setRules(null);setDefaultLoading(true);
+      void getBasketballRuleDefaults().then(value => { if (!cancelled) {setRules(value);setRulesError('');} })
+        .catch(error => { if (!cancelled) setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.'); })
+        .finally(()=>{if(!cancelled)setDefaultLoading(false);});
     }
     return () => { cancelled = true; };
   }, [activeCompetition?.id, competitionsData.loading, creatingCompetition]);
@@ -182,15 +192,17 @@ export function Competition() {
     if (invalid) { setRulesError(`Check ${invalid[0]}: use a whole number from ${invalid[1][0]} to ${invalid[1][1]}.`); setSaved(false); return; }
     if (!leagueId) {setRulesError('League is required. Select a league before saving the competition.');return;}
     if (!leaguesData.rows.some(item=>item.id===leagueId)) {setRulesError('The selected league is unavailable for this organization. Refresh and select a valid league.');return;}
+    if(minTeams<2||maxTeams<minTeams||maxTeams>128){setRulesError('Team limits must be between 2 and 128, with maximum at least minimum.');return;}
+    if(competitionFormat==='SINGLE_ELIMINATION' && (minTeams & (minTeams-1))!==0){setRulesError('For single elimination, set the minimum to a power of two (2, 4, 8, 16, 32, 64).');return;}
     if (!competitionName.trim()||!seasonName.trim()) { setRulesError('Enter both a competition name and season name before saving.'); return; }
     setRulesError(''); setRulesNotice(''); setSaved(false);
     try {
       let seasonId=activeCompetition?.season_id??null;
       if(seasonId)await seasonsData.update(seasonId,{name:seasonName.trim()});else seasonId=await seasonsData.insert({name:seasonName.trim(),active:true});
-      if (activeCompetition) await competitionsData.update(activeCompetition.id, { name: competitionName.trim(), format: competitionFormat, rule_settings: rules,league_id:leagueId,season_id:seasonId });
-      else {const id=await competitionsData.insert({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, rule_version: 1,league_id:leagueId,season_id:seasonId });setSelectedCompetitionId(id);setCreatingCompetition(false);}
+      if (activeCompetition) await competitionsData.update(activeCompetition.id, { name: competitionName.trim(), format: competitionFormat, rule_settings: rules,league_id:leagueId,season_id:seasonId,min_teams:minTeams,max_teams:maxTeams });
+      else {const id=await competitionsData.insert({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, rule_version: 1,league_id:leagueId,season_id:seasonId,min_teams:minTeams,max_teams:maxTeams });setSelectedCompetitionId(id);setCreatingCompetition(false);}
       setSaved(true);setDetailOpen(true);
-    } catch (e) { setRulesError(e instanceof Error ? e.message : 'Unable to save the competition rule set.'); }
+    } catch (e) { setRulesError(leagueErrorMessage(e)); }
   }
   async function saveMyDefaults() {
     if (!rules) { setRulesError('Load the basketball rule defaults from the database before saving.'); return; }
@@ -206,6 +218,51 @@ export function Competition() {
     setRules(data as BasketballRules);
     setRulesNotice('Your personal defaults were removed and restored from the shared database defaults. The current competition changes only if you click Save rule set.');
   }
+  async function reloadRegistrations(){
+    if(!activeCompetition)return;
+    const [t,p,m]=await Promise.all([
+      supabase.from('competition_teams').select('team_id').eq('competition_id',activeCompetition.id),
+      supabase.from('competition_players').select('team_id,player_id').eq('competition_id',activeCompetition.id),
+      supabase.from('competition_matches').select('id,round_no,slot_no,home_team_id,away_team_id,status').eq('competition_id',activeCompetition.id).order('round_no').order('slot_no'),
+    ]);
+    if(t.error||p.error||m.error){setRulesError(t.error?.message||p.error?.message||m.error?.message||'Cannot load registrations');return;}
+    setRegisteredTeams(t.data??[]);setRegisteredPlayers(p.data??[]);setMatches(m.data??[]);
+  }
+  useEffect(()=>{if(activeCompetition?.id&&detailOpen)void reloadRegistrations();},[activeCompetition?.id,detailOpen]);
+  async function registerTeam(teamId:string){
+    if(!activeCompetition)return;
+    const {error}=await supabase.rpc('register_competition_team',{p_competition_id:activeCompetition.id,p_team_id:teamId});
+    if(error)throw error;
+  }
+  async function registerPlayer(teamId:string,playerId:string){
+    if(!activeCompetition)return;
+    const {error}=await supabase.rpc('register_competition_player',{p_competition_id:activeCompetition.id,p_team_id:teamId,p_player_id:playerId});
+    if(error)throw error;
+  }
+  async function bulkRegister(){
+    if(!activeCompetition)return;
+    setBulkBusy(true);setRulesError('');setRulesNotice('');
+    try{
+      const lines=bulkCsv.trim().split(/\r?\n/).filter(Boolean);
+      const rows=lines.map((line,i)=>{const parts=line.split(',').map(x=>x.trim());if(parts.length!==2)throw new Error(`CSV line ${i+1}: expected team_name,player_name`);return parts;});
+      if(rows[0]?.[0].toLowerCase()==='team_name')rows.shift();
+      if(!rows.length)throw new Error('CSV is empty');
+      const teamNames=new Map(teamsData.rows.map(t=>[t.name.toLowerCase(),t]));
+      const playerNames=new Map(playersData.rows.map(p=>[`${p.first_name} ${p.last_name}`.toLowerCase(),p]));
+      const assignments=rows.map(([teamName,playerName],i)=>{const team=teamNames.get(teamName.toLowerCase());const player=playerNames.get(playerName.toLowerCase());if(!team||!player)throw new Error(`CSV row ${i+1}: team or player not found. Import new teams/players in Team/Player pages first.`);return [team.id,player.id] as const;});
+      for(const teamId of [...new Set(assignments.map(x=>x[0]))])await registerTeam(teamId);
+      for(const [teamId,playerId] of assignments)await registerPlayer(teamId,playerId);
+      await reloadRegistrations();setRulesNotice(`${assignments.length} team/player assignments imported.`);
+    }catch(e){setRulesError(e instanceof Error?e.message:'Bulk registration failed');}
+    finally{setBulkBusy(false);}
+  }
+  async function startCompetition(){
+    if(!activeCompetition)return;
+    setBusy(true);setRulesError('');setRulesNotice('');
+    try{const {data,error}=await supabase.rpc('start_sports_competition',{p_competition_id:activeCompetition.id});if(error)throw error;await competitionsData.reload();await reloadRegistrations();setRulesNotice(`Competition started; ${data} first-stage games generated.`);}
+    catch(e){setRulesError(e instanceof Error?e.message:'Unable to start competition');}
+    finally{setBusy(false);}
+  }
   const total=competitionsData.rows.length;
   const draftCount=competitionsData.rows.filter(row=>row.status==='DRAFT').length;
   const reviewCount=competitionsData.rows.filter(row=>row.status==='PENDING_REVIEW').length;
@@ -216,20 +273,33 @@ export function Competition() {
     <DataState loading={competitionsData.loading||seasonsData.loading||leaguesData.loading} error={competitionsData.error||seasonsData.error||leaguesData.error} onRetry={() => {void competitionsData.reload();void seasonsData.reload();void leaguesData.reload();}}/>
     {tab==='Dashboard'&&<><div className="metrics-grid"><Metric label="TOTAL COMPETITIONS" value={String(total)} note="Current organization" icon={Trophy}/><Metric label="DRAFT" value={String(draftCount)} note="Editable" icon={Clock3} tone="blue"/><Metric label="PENDING REVIEW" value={String(reviewCount)} note="Awaiting owner approval" icon={ShieldCheck} tone="orange"/><Metric label="APPROVED" value={String(approvedCount)} note="Rules locked" icon={CheckCircle2} tone="green"/></div><Panel title="Recent competitions" action={<button className="text-link" onClick={()=>setTab('Competition list')}>View all <ArrowRight size={14}/></button>}>{listing(competitionsData.rows.slice(0,5))}</Panel></>}
     {tab==='Competition list'&&!detailOpen&&<Panel title="Competitions in your organization">{listing(competitionsData.rows)}</Panel>}
-    {tab==='Competition list'&&detailOpen&&<><div className="table-actions"><Button onClick={()=>{setDetailOpen(false);setCreatingCompetition(false);}}><ArrowRight size={14}/> Back to list</Button>{activeCompetition&&<Pill tone={activeCompetition.status==='APPROVED'?'soft-green':activeCompetition.status==='PENDING_REVIEW'?'soft-orange':'neutral'}>{activeCompetition.status.replaceAll('_',' ')}</Pill>}{activeCompetition?.status==='DRAFT'&&<Button disabled={busy} onClick={()=>void transition('PENDING_REVIEW')}>Submit for review</Button>}{activeCompetition?.status==='PENDING_REVIEW'&&competitionsData.workspace?.role==='OWNER'&&<Button variant="primary" disabled={busy} onClick={()=>void transition('APPROVED')}><Check size={15}/> Approve & lock</Button>}{(!isReadOnly||creatingCompetition)&&<Button variant="primary" onClick={()=>void saveRuleSet()} disabled={busy||competitionsData.loading||seasonsData.loading||leaguesData.loading||!rules||!leagueId}><Check size={15}/> Save rule set</Button>}</div>
-    {isReadOnly&&<div className="callout">{activeCompetition?.status==='APPROVED'?'Approved competition: all details and applied rules are permanently read-only.':'Pending owner review: details and applied rules are read-only.'}</div>}
+    {tab==='Competition list'&&detailOpen&&<><div className="table-actions"><Button onClick={()=>{setDetailOpen(false);setCreatingCompetition(false);}}><ArrowRight size={14}/> Back to list</Button>{activeCompetition&&<Pill tone={activeCompetition.status==='APPROVED'?'soft-green':activeCompetition.status==='PENDING_REVIEW'?'soft-orange':'neutral'}>{activeCompetition.status.replaceAll('_',' ')}</Pill>}{activeCompetition?.status==='APPROVED'&&<Button variant="primary" disabled={busy} onClick={()=>void startCompetition()}><Play size={15}/> Start competition</Button>}{activeCompetition?.status==='DRAFT'&&<Button disabled={busy} onClick={()=>void transition('PENDING_REVIEW')}>Submit for review</Button>}{activeCompetition?.status==='PENDING_REVIEW'&&competitionsData.workspace?.role==='OWNER'&&<Button variant="primary" disabled={busy} onClick={()=>void transition('APPROVED')}><Check size={15}/> Approve & lock</Button>}{(!isReadOnly||creatingCompetition)&&<Button variant="primary" onClick={()=>void saveRuleSet()} disabled={busy||competitionsData.loading||seasonsData.loading||leaguesData.loading||!rules||!leagueId}><Check size={15}/> Save rule set</Button>}</div>
+    {isReadOnly&&<div className="callout">{activeCompetition?.status==='APPROVED'?'Approved competition: rules are locked; team and player registration is open until the competition starts.':'Pending owner review: details and applied rules are read-only.'}</div>}
     {saved && <div className="success-banner"><CheckCircle2 size={17}/> Competition and rules saved to your organization database.</div>}
     {rulesNotice && <div className="success-banner"><CheckCircle2 size={17}/>{rulesNotice}</div>}
     {rulesError && <div className="form-error rule-error">{rulesError}</div>}
     <fieldset disabled={isReadOnly} style={{border:0,padding:0,margin:0,minWidth:0}}><div className="form-layout"><div className="form-main">
-      <Panel title={creatingCompetition?"Create new competition":"Competition details"}><div className="field-grid">{creatingCompetition&&<div className="span-2 callout">Creating a new competition. Existing competitions are not selected or edited.</div>}{!leaguesData.loading&&leaguesData.rows.length===0&&<div className="span-2 form-error">No league exists for this organization. Create a league before creating a competition.</div>}<label className="span-2">League *<select value={leagueId} disabled={isReadOnly} onChange={e=>{setLeagueId(e.target.value);setRulesError('');}} required><option value="">Select a league (required)</option>{leaguesData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
-      {!rules&&<div className="empty-state">Loading rule defaults from the database…</div>}
+      <Panel title={creatingCompetition?"Create new competition":"Competition details"}><div className="field-grid">{creatingCompetition&&<div className="span-2 callout">Creating a new competition. Existing competitions are not selected or edited.</div>}{!leaguesData.loading&&leaguesData.rows.length===0&&<div className="span-2 form-error">No league exists for this organization. Create a league before creating a competition.</div>}<label className="span-2">League *<select value={leagueId} disabled={isReadOnly} onChange={e=>{setLeagueId(e.target.value);setRulesError('');}} required><option value="">Select a league (required)</option>{leaguesData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Minimum teams<input type="number" min={2} max={128} value={minTeams} onChange={e=>setMinTeams(Number(e.target.value))}/></label><label>Maximum teams<input type="number" min={2} max={128} value={maxTeams} onChange={e=>setMaxTeams(Number(e.target.value))}/></label><label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
+      {!rules&&<div className="empty-state">{defaultLoading?'Loading rule defaults from the database…':<><p>Rule defaults unavailable. {rulesError||'Try again.'}</p><Button onClick={()=>void getBasketballRuleDefaults().then(setRules).catch(e=>setRulesError(String(e)))}>Retry loading defaults</Button></>}</div>}
       {rules&&<><Panel title="Game format"><div className="field-grid"><label>Format<input value="5 on 5 basketball" readOnly/></label>{numberField('periodLengthMinutes','Quarter length (minutes)')}{numberField('overtimeMinutes','Overtime length (minutes)')}</div></Panel>
       <Panel title="Timeout rules"><div className="field-grid">{numberField('firstHalfTimeouts','Timeouts · first half (Q1–Q2)')}{numberField('secondHalfTimeouts','Timeouts · second half (Q3–Q4)')}{numberField('fourthQuarterTimeoutRestrictionMinutes','Q4 timeout restriction window (minutes)')}{numberField('finalTwoMinuteTimeoutMax','Maximum remaining in Q4 restriction window')}{numberField('timeoutDurationSeconds','Timeout duration (seconds)')}{toggleField('headCoachRequestRequired','Require Head Coach request at scorer’s table')}</div></Panel>
       <Panel title="Fouls and ejections"><div className="field-grid">{numberField('playerFoulLimit','Personal fouls before disqualification')}{numberField('teamFoulPenaltyAt','Team foul penalty starts at foul number')}{numberField('teamFoulFreeThrows','Free throws for each defensive team foul at penalty')}{numberField('technicalFreeThrows','Free throws for a technical foul')}{numberField('ejectionTechnicalLimit','Ejection at technical fouls')}{numberField('ejectionUnsportsmanlikeLimit','Ejection at unsportsmanlike fouls')}{numberField('ejectionMixedTechnicalLimit','Mixed ejection · technical fouls')}{numberField('ejectionMixedUnsportsmanlikeLimit','Mixed ejection · unsportsmanlike fouls')}</div></Panel>
       <Panel title="Overtime and game clock"><div className="field-grid">{numberField('overtimeTimeouts','Timeouts per team · each overtime')}{numberField('clockStopLastMinutes','Clock stops during final minutes')}{toggleField('carryFourthQuarterFoulsToOvertime','Carry Q4 team fouls into first overtime')}{toggleField('runningClockEnabled','Use running time')}{toggleField('clockStopInSecondQuarter','Stop clock in final minutes of Q2')}{toggleField('clockStopInFourthQuarter','Stop clock in final minutes of Q4')}</div><p className="rule-help">These values are saved with the competition and copied into each new game's rule snapshot.</p></Panel></>}
       <Panel title="Standings tie-breakers"><div className="rule-list"><div><span className="drag">1</span><b>Wins</b><Pill tone="neutral">1st</Pill></div><div><span className="drag">2</span><b>Head-to-head result</b><Pill tone="neutral">2nd</Pill></div><div><span className="drag">3</span><b>Point difference</b><Pill tone="neutral">3rd</Pill></div></div><small className="muted">Default tie-break order for this competition.</small></Panel>
-    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">{activeCompetition ? `VERSION ${activeCompetition.rule_version}` : 'DATABASE DEFAULTS'}</Pill><small>Shared defaults and personal overrides are stored in Supabase.</small></div><div className="note-box"><CircleHelp size={16}/><span>New competitions use your personal defaults when saved, otherwise the shared database defaults.</span></div><div className="table-actions"><Button onClick={()=>void saveMyDefaults()} disabled={!rules}>Save as my defaults</Button><Button onClick={()=>void restoreSharedDefaults()} disabled={!rules}>Restore shared defaults</Button></div><button className="text-link full-link" onClick={() => { setRulesError(''); setRules(activeCompetition?.rule_settings ?? null); if (!activeCompetition) void getBasketballRuleDefaults().then(setRules).catch(error => setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.')); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div></fieldset></>}
+    </div><aside className="side-summary"><Panel title="Saved parameters"><div className="version-card"><span className="version-icon"><Sparkles size={17}/></span><b>Basketball · Custom rules</b><Pill tone="soft-blue">{activeCompetition ? `VERSION ${activeCompetition.rule_version}` : 'DATABASE DEFAULTS'}</Pill><small>Shared defaults and personal overrides are stored in Supabase.</small></div><div className="note-box"><CircleHelp size={16}/><span>New competitions use your personal defaults when saved, otherwise the shared database defaults.</span></div><div className="table-actions"><Button onClick={()=>void saveMyDefaults()} disabled={!rules}>Save as my defaults</Button><Button onClick={()=>void restoreSharedDefaults()} disabled={!rules}>Restore shared defaults</Button></div><button className="text-link full-link" onClick={() => { setRulesError(''); setRules(activeCompetition?.rule_settings ?? null); if (!activeCompetition) void getBasketballRuleDefaults().then(setRules).catch(error => setRulesError(error instanceof Error ? error.message : 'Unable to load database rule defaults.')); setSaved(false); }}>Reload saved rules <ArrowRight size={14}/></button></Panel></aside></div></fieldset>      {activeCompetition && ['APPROVED','ACTIVE','COMPLETED'].includes(activeCompetition.status) && <Panel title="Competition teams, players and fixtures">
+        <p className="rule-help">{registeredTeams.length} teams registered. Required: {activeCompetition.min_teams}–{activeCompetition.max_teams}. Approved competitions accept registration; Active/Completed are read-only.</p>
+        {activeCompetition.status==='APPROVED' && <>
+          <div className="field-grid"><label>Existing team<select value={selectedTeam} onChange={e=>setSelectedTeam(e.target.value)}><option value="">Choose team</option>{teamsData.rows.filter(x=>x.active).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+          <label>Existing player<select value={selectedPlayer} onChange={e=>setSelectedPlayer(e.target.value)}><option value="">Choose player</option>{playersData.rows.filter(x=>x.active).map(p=><option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>)}</select></label></div>
+          <div className="table-actions"><Button onClick={()=>void registerTeam(selectedTeam).then(()=>reloadRegistrations()).catch(e=>setRulesError(String(e)))} disabled={!selectedTeam}>Register team</Button><Button onClick={()=>void registerPlayer(selectedTeam,selectedPlayer).then(()=>reloadRegistrations()).catch(e=>setRulesError(String(e)))} disabled={!selectedTeam||!selectedPlayer}>Assign player</Button></div>
+          <label>Bulk assign existing teams and players (CSV: team_name,player_name)<textarea rows={5} value={bulkCsv} onChange={e=>setBulkCsv(e.target.value)} placeholder={'team_name,player_name\nNorth Falcons,Alex Cruz'}/></label>
+          <div className="table-actions"><input type="file" accept=".csv,text/csv" onChange={e=>{const file=e.target.files?.[0];if(file)void file.text().then(setBulkCsv);}}/><Button disabled={bulkBusy||!bulkCsv.trim()} onClick={()=>void bulkRegister()}>{bulkBusy?'Importing…':'Bulk register CSV'}</Button></div>
+          <p className="rule-help">CSV references existing team and player names. Create new records or upload images in Team/Player management first. Import validates names before assignment.</p>
+        </>}
+        <div className="table-wrap"><table><thead><tr><th>TEAM</th><th>PLAYERS</th></tr></thead><tbody>{registeredTeams.map(t=><tr key={t.team_id}><td>{teamsData.rows.find(x=>x.id===t.team_id)?.name??t.team_id}</td><td>{registeredPlayers.filter(x=>x.team_id===t.team_id).length}</td></tr>)}</tbody></table></div>
+        {matches.length>0&&<><h3>Fixtures and championship ladder</h3><div className="table-wrap"><table><thead><tr><th>ROUND</th><th>MATCH</th><th>HOME</th><th>AWAY</th><th>STATUS</th></tr></thead><tbody>{matches.map(m=><tr key={m.id}><td>{m.round_no}</td><td>{m.slot_no}</td><td>{teamsData.rows.find(t=>t.id===m.home_team_id)?.name??'TBD'}</td><td>{teamsData.rows.find(t=>t.id===m.away_team_id)?.name??'TBD'}</td><td>{m.status}</td></tr>)}</tbody></table></div></>}
+      </Panel>}
+</>}
   </>;
 }
 
