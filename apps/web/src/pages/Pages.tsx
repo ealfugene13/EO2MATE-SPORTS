@@ -75,12 +75,41 @@ export function Dashboard() {
 }
 
 export function League() {
-  type LeagueRow={league_id:string;league_name:string;format:string;organization_id:string;organization_name:string;season_name:string|null;created_at:string};
-  const [tab,setTab]=useState<'Summary'|'League list'>('Summary');const [leagues,setLeagues]=useState<LeagueRow[]>([]);const [groupName,setGroupName]=useState('');const [loading,setLoading]=useState(true);const [error,setError]=useState('');
-  const teams=useWorkspaceRows<{id:string;active:boolean}>('teams','id,active,created_at');const games=useWorkspaceRows<{id:string;status:string}>('games','id,status,created_at');
-  async function load(){setLoading(true);setError('');try{const workspace=await getWorkspace();setGroupName(workspace.user_grp.slice(0,8).toUpperCase());const {data,error:leagueError}=await supabase.rpc('list_group_leagues',{p_user_grp:workspace.user_grp});if(leagueError)throw leagueError;setLeagues((data??[]) as LeagueRow[]);}catch(e){setError(e instanceof Error?e.message:'Unable to load league directory.');}finally{setLoading(false);}}
-  useEffect(()=>{void load();},[]);
-  return <><PageTitle eyebrow="LEAGUE MANAGEMENT" title="League" subtitle="Review the active league dashboard or browse leagues connected to your user group." action={<Link className="button primary" to="/setup?tab=league"><Plus size={16}/> Create League</Link>}/><div className="tab-row">{(['Summary','League list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>setTab(value)}>{value}{value==='League list'&&<span>{leagues.length}</span>}</button>)}</div>{tab==='Summary'?<><DataState loading={loading||teams.loading||games.loading} error={error||teams.error||games.error} onRetry={()=>{void load();void teams.reload();void games.reload();}}/><div className="metrics-grid"><Metric label="LEAGUES IN GROUP" value={String(leagues.length)} note={`Group ${groupName||'—'}`} icon={Trophy}/><Metric label="ACTIVE TEAMS" value={String(teams.rows.filter(row=>row.active).length)} note="Current workspace" icon={Users} tone="blue"/><Metric label="SCHEDULED GAMES" value={String(games.rows.filter(row=>row.status==='SCHEDULED').length)} note="Current workspace" icon={CalendarDays} tone="purple"/><Metric label="COMPLETED GAMES" value={String(games.rows.filter(row=>row.status==='FINAL').length)} note="Final results" icon={CheckCircle2} tone="green"/></div><div className="dashboard-grid"><Panel title="Leagues in your group" action={<button className="text-link" onClick={()=>setTab('League list')}>View all <ArrowRight size={14}/></button>}><div className="table-wrap"><table><thead><tr><th>LEAGUE</th><th>ORGANIZATION</th><th>FORMAT</th><th>SEASON</th></tr></thead><tbody>{leagues.slice(0,5).map(league=><tr key={league.league_id}><td><b>{league.league_name}</b></td><td>{league.organization_name}</td><td>{league.format.replaceAll('_',' ')}</td><td>{league.season_name??'—'}</td></tr>)}</tbody></table>{!loading&&!leagues.length&&<div className="empty-state">No leagues found for this user group.</div>}</div></Panel><Panel title="League setup"><div className="attention-item"><span className="attention-icon blue"><ShieldCheck size={17}/></span><div><b>Setup and rules</b><small>Configure league rules, teams, and review status.</small></div><Link to="/setup">Open setup <ArrowRight size={14}/></Link></div></Panel></div></>:<><DataState loading={loading} error={error} onRetry={()=>void load()}/>{!loading&&!error&&<Panel title="Leagues under your user group" action={<span className="muted tiny">Group {groupName||'—'} · {leagues.length} leagues</span>}><div className="table-wrap"><table><thead><tr><th>LEAGUE</th><th>ORGANIZATION</th><th>FORMAT</th><th>SEASON</th><th>CREATED</th></tr></thead><tbody>{leagues.map(league=><tr key={league.league_id}><td><b>{league.league_name}</b></td><td>{league.organization_name}</td><td>{league.format.replaceAll('_',' ')}</td><td>{league.season_name??'—'}</td><td>{new Date(league.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!leagues.length&&<div className="empty-state">No leagues found for this user group.</div>}</div></Panel>}</>}</>;
+  type LeagueRow = { id: string; organization_id: string; name: string; created_at: string };
+  const [tab, setTab] = useState<'Summary' | 'League list'>('Summary');
+  const [leagues, setLeagues] = useState<LeagueRow[]>([]);
+  const [organizationName, setOrganizationName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const teams = useWorkspaceRows<{id:string;active:boolean}>('teams','id,active,created_at');
+  const games = useWorkspaceRows<{id:string;status:string}>('games','id,status,created_at');
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      const workspace = await getWorkspace();
+      const [leagueResult, organizationResult] = await Promise.all([
+        supabase.from('leagues').select('id,organization_id,name,created_at').eq('organization_id',workspace.id).order('created_at',{ascending:false}),
+        supabase.from('organizations').select('name').eq('id',workspace.id).single(),
+      ]);
+      if (leagueResult.error) throw leagueResult.error;
+      if (organizationResult.error) throw organizationResult.error;
+      setLeagues((leagueResult.data ?? []) as LeagueRow[]);
+      setOrganizationName(organizationResult.data.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to load leagues.');
+    } finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); }, []);
+  const table = (rows: LeagueRow[]) => <div className="table-wrap"><table><thead><tr><th>LEAGUE</th><th>ORGANIZATION</th><th>CREATED</th></tr></thead><tbody>{rows.map(league=><tr key={league.id}><td><b>{league.name}</b></td><td>{organizationName}</td><td>{new Date(league.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!loading&&!rows.length&&<div className="empty-state">No leagues found for this organization.</div>}</div>;
+  return <>
+    <PageTitle eyebrow="LEAGUE MANAGEMENT" title="League" subtitle="Manage leagues registered under your organization." action={<Link className="button primary" to="/setup?tab=league"><Plus size={16}/> Create League</Link>}/>
+    <div className="tab-row">{(['Summary','League list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>setTab(value)}>{value}{value==='League list'&&<span>{leagues.length}</span>}</button>)}</div>
+    <DataState loading={loading||teams.loading||games.loading} error={error||teams.error||games.error} onRetry={()=>{void load();void teams.reload();void games.reload();}}/>
+    {tab==='Summary'?<>
+      <div className="metrics-grid"><Metric label="LEAGUES IN ORGANIZATION" value={String(leagues.length)} note={organizationName||'Current organization'} icon={Trophy}/><Metric label="ACTIVE TEAMS" value={String(teams.rows.filter(row=>row.active).length)} note="Current organization" icon={Users} tone="blue"/><Metric label="SCHEDULED GAMES" value={String(games.rows.filter(row=>row.status==='SCHEDULED').length)} note="Current organization" icon={CalendarDays} tone="purple"/><Metric label="COMPLETED GAMES" value={String(games.rows.filter(row=>row.status==='FINAL').length)} note="Current organization" icon={CheckCircle2} tone="green"/></div>
+      <div className="dashboard-grid"><Panel title="Leagues in your organization" action={<button className="text-link" onClick={()=>setTab('League list')}>View all <ArrowRight size={14}/></button>}>{table(leagues.slice(0,5))}</Panel><Panel title="League setup"><div className="attention-item"><span className="attention-icon blue"><ShieldCheck size={17}/></span><div><b>Setup and rules</b><small>Configure league rules, teams, and review status.</small></div><Link to="/setup">Open setup <ArrowRight size={14}/></Link></div></Panel></div>
+    </>:<Panel title="Leagues under your organization" action={<span className="muted tiny">{organizationName} · {leagues.length} leagues</span>}>{table(leagues)}</Panel>}
+  </>;
 }
 
 export function Competition() {
