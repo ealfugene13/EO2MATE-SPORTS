@@ -188,7 +188,7 @@ export function Competition() {
     if(/approved.*locked|pending.*read.only|submitted.*cannot/i.test(message))return 'This competition is under review or approved and cannot be modified.';
     return message;
   };
-  const startNew=()=>{setCreatingCompetition(true);setDetailOpen(true);setTab('Competition list');setSelectedCompetitionId('');setLeagueId('');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setMinTeams(2);setMaxTeams(64);setRules(null);setRulesError('');setRulesNotice('');setSaved(false);};
+  const startNew=()=>{setCreatingCompetition(true);setDetailOpen(true);setTab('Competition list');setSelectedCompetitionId('');setLeagueId('');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setMinTeams(2);setMaxTeams(64);setRules(null);setRulesError('');setRulesNotice('');setSaved(false);setDefaultsRetry(v=>v+1);};
   const openCompetition=(id:string)=>{setCreatingCompetition(false);setSelectedCompetitionId(id);setDetailOpen(true);setTab('Competition list');setRulesError('');setRulesNotice('');setSaved(false);};
   async function transition(status:'PENDING_REVIEW'|'APPROVED'){
     if(!activeCompetition)return; if(!activeCompetition.league_id){setRulesError('Assign a league and save this competition before submitting it for review.');return;} setBusy(true);setRulesError('');setRulesNotice('');
@@ -211,7 +211,7 @@ export function Competition() {
         .finally(()=>{if(!cancelled)setDefaultLoading(false);});
     }
     return () => { cancelled = true; };
-  }, [activeCompetition?.id, competitionsData.loading, creatingCompetition, defaultsRetry]);
+  }, [activeCompetition?.id, creatingCompetition, defaultsRetry]);
   const numberField = (key: NumberRuleKey, label: string) => !rules ? null : <label>{label}<input type="number" min={ruleBounds[key][0]} max={ruleBounds[key][1]} value={rules[key]} disabled={isReadOnly} onChange={e => { setRules(current => current ? ({ ...current, [key]: Number(e.target.value) }) : current); setRulesError(''); }}/></label>;
   const toggleField = (key: BooleanRuleKey, label: string) => !rules ? null : <label className="rule-toggle"><span>{label}</span><input type="checkbox" checked={rules[key]} disabled={isReadOnly} onChange={e => { setRules(current => current ? ({ ...current, [key]: e.target.checked }) : current); setRulesError(''); }}/></label>;
   async function saveRuleSet() {
