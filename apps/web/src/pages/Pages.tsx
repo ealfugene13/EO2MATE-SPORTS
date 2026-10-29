@@ -312,13 +312,60 @@ function PlayerSummary() {
 }
 
 function PlayerDetails({player,onBack}:{player:DirectoryRow;onBack:()=>void}) {
-  type Roster={id:string;team_id:string;season_id:string;jersey_number:number|null;position:string|null;status:string;teams?:{name:string}|null;seasons?:{name:string}|null};
-  const rosters=useWorkspaceRows<Roster>('rosters','id,team_id,season_id,jersey_number,position,status,created_at,teams(name),seasons(name)');
+  type Roster={id:string;player_id:string;team_id:string;season_id:string;jersey_number:number|null;position:string|null;status:string;teams?:{name:string}|null;seasons?:{name:string}|null;created_at?:string};
+  const rosters=useWorkspaceRows<Roster>('rosters','id,player_id,team_id,season_id,jersey_number,position,status,created_at,teams(name),seasons(name)');
   const events=useWorkspaceRows<StatEvent>('game_events','id,game_id,player_id,event_type,points,reversed_event_id,created_at');
-  const [photoUrl,setPhotoUrl]=useState('');const [photoError,setPhotoError]=useState('');
-  useEffect(()=>{let cancelled=false;if(player.photo_path){void supabase.storage.from('player-photos').createSignedUrl(player.photo_path,3600).then(({data,error})=>{if(cancelled)return;if(error)setPhotoError(error.message);else setPhotoUrl(data?.signedUrl??'');});}return()=>{cancelled=true;};},[player.photo_path]);
-  const assignments=rosters.rows.filter(row=>row.status==='ACTIVE');const averages=averagePlayerStats(events.rows,player.id);
-  return <><div className="form-footer"><Button onClick={onBack}><ArrowLeftRight size={14}/>Back to player list</Button><h2>{player.first_name} {player.last_name}</h2></div><DataState loading={rosters.loading||events.loading} error={rosters.error||events.error} onRetry={()=>{void rosters.reload();void events.reload();}}/><div className="dashboard-grid"><Panel title="Player profile"><div style={{display:'flex',alignItems:'center',gap:18,padding:8}}>{photoUrl?<img src={photoUrl} alt={`${player.first_name} ${player.last_name}`} style={{width:112,height:112,borderRadius:16,objectFit:'cover'}}/>:<span className="avatar lavender" style={{width:112,height:112,fontSize:30,display:'grid',placeItems:'center'}}>{`${player.first_name?.[0]??''}${player.last_name?.[0]??''}`}</span>}<div><h2>{player.first_name} {player.last_name}</h2>{assignments.length?assignments.map(row=><p key={row.id}>{row.teams?.name??'Team'} · {row.position??'Position not set'} · #{row.jersey_number??'—'} · {row.seasons?.name??'Season'}</p>):<p>No active team assignment</p>}<Pill tone={player.active?'soft-green':'neutral'}>{player.active?'ACTIVE':'INACTIVE'}</Pill>{photoError&&<p className="muted">{photoError}</p>}</div></div></Panel><Panel title="Average stats"><div className="metrics-grid compact"><Metric label="GAMES WITH RECORDED STATS" value={String(averages.games)} note="Based on saved player events" icon={Activity}/><Metric label="POINTS / GAME" value={averages.points.toFixed(1)} note="PPG" icon={Trophy} tone="orange"/><Metric label="REBOUNDS / GAME" value={averages.rebounds.toFixed(1)} note="RPG" icon={Users} tone="blue"/><Metric label="ASSISTS / GAME" value={averages.assists.toFixed(1)} note="APG" icon={Award} tone="purple"/></div><div className="metrics-grid compact"><Metric label="STEALS / GAME" value={averages.steals.toFixed(1)} note="SPG" icon={ShieldCheck}/><Metric label="BLOCKS / GAME" value={averages.blocks.toFixed(1)} note="BPG" icon={Flag} tone="green"/><Metric label="TURNOVERS / GAME" value={averages.turnovers.toFixed(1)} note="TPG" icon={Activity} tone="orange"/></div></Panel></div><Panel title="Team assignments"><div className="table-wrap"><table><thead><tr><th>TEAM</th><th>SEASON</th><th>POSITION</th><th>JERSEY</th><th>STATUS</th></tr></thead><tbody>{assignments.map(row=><tr key={row.id}><td>{row.teams?.name??'Team'}</td><td>{row.seasons?.name??'—'}</td><td>{row.position??'—'}</td><td>{row.jersey_number??'—'}</td><td>{row.status}</td></tr>)}</tbody></table>{!rosters.loading&&!assignments.length&&<div className="empty-state">Assign this player to a team roster to show team and position.</div>}</div></Panel></>;
+  const [photoPath,setPhotoPath]=useState(player.photo_path??null);
+  const [photoUrl,setPhotoUrl]=useState('');
+  const [photoError,setPhotoError]=useState('');
+  const [uploading,setUploading]=useState(false);
+  useEffect(()=>{let cancelled=false;setPhotoUrl('');setPhotoError('');if(photoPath){void supabase.storage.from('player-photos').createSignedUrl(photoPath,3600).then(({data,error})=>{if(cancelled)return;if(error)setPhotoError(error.message);else setPhotoUrl(data?.signedUrl??'');});}return()=>{cancelled=true;};},[photoPath]);
+  const assignments=rosters.rows.filter(row=>row.player_id===player.id).sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
+  const activeAssignments=assignments.filter(row=>row.status==='ACTIVE');
+  const current=activeAssignments[0];
+  const averages=averagePlayerStats(events.rows,player.id);
+  async function uploadPhoto(file?:File){
+    if(!file)return;
+    if(!supportedImageTypes.has(file.type)||file.size>5*1024*1024){setPhotoError('Choose a JPG, PNG, WebP, or GIF image under 5 MB.');return;}
+    setUploading(true);setPhotoError('');
+    try{
+      const workspace=await getWorkspace();
+      const safeName=file.name.toLowerCase().replace(/[^a-z0-9._-]/g,'-');
+      const path=`${workspace.id}/${player.id}/${crypto.randomUUID()}-${safeName}`;
+      const {error:uploadError}=await supabase.storage.from('player-photos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+      if(uploadError)throw uploadError;
+      const {error:updateError}=await supabase.from('players').update({photo_path:path}).eq('id',player.id).eq('organization_id',workspace.id);
+      if(updateError){await supabase.storage.from('player-photos').remove([path]);throw updateError;}
+      setPhotoPath(path);
+      // Old photo is retained to avoid breaking other references; cleanup can be handled separately.
+    }catch(e){setPhotoError(e instanceof Error?e.message:'Photo upload failed.');}
+    finally{setUploading(false);}
+  }
+  return <>
+    <div className="form-footer"><Button onClick={onBack}><ArrowLeftRight size={14}/>Back to player list</Button><h2>{player.first_name} {player.last_name}</h2></div>
+    <DataState loading={rosters.loading||events.loading} error={rosters.error||events.error} onRetry={()=>{void rosters.reload();void events.reload();}}/>
+    <div className="dashboard-grid">
+      <Panel title="Player profile">
+        <div style={{display:'flex',alignItems:'center',gap:18,padding:8,flexWrap:'wrap'}}>
+          <div style={{display:'grid',gap:8,justifyItems:'center'}}>
+            {photoUrl?<img src={photoUrl} alt={`${player.first_name} ${player.last_name}`} style={{width:112,height:112,borderRadius:16,objectFit:'cover'}}/>:<span className="avatar lavender" style={{width:112,height:112,fontSize:30,display:'grid',placeItems:'center'}}>{`${player.first_name?.[0]??''}${player.last_name?.[0]??''}`}</span>}
+            <label className="button" style={{cursor:uploading?'wait':'pointer',fontSize:12,padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:8}}>
+              <ImagePlus size={14} style={{verticalAlign:'middle',marginRight:5}}/>{uploading?'Uploading…':photoPath?'Change photo':'Upload photo'}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={uploading} style={{display:'none'}} onChange={e=>{void uploadPhoto(e.target.files?.[0]);e.target.value='';}}/>
+            </label>
+          </div>
+          <div><h2>{player.first_name} {player.last_name}</h2>
+            {current?<p><b>Current team:</b> {current.teams?.name??'Team'} · {current.position??'Position not set'} · #{current.jersey_number??'—'} · {current.seasons?.name??'Season'}</p>:<p>No active team assignment</p>}
+            {activeAssignments.length>1&&<p className="muted">{activeAssignments.length} active team assignments; see the roster history below.</p>}
+            <Pill tone={player.active?'soft-green':'neutral'}>{player.active?'ACTIVE':'INACTIVE'}</Pill>
+            {photoError&&<p role="alert" style={{color:'#b91c1c'}}>{photoError}</p>}
+          </div>
+        </div>
+      </Panel>
+      <Panel title="Average stats"><div className="metrics-grid compact"><Metric label="GAMES WITH RECORDED STATS" value={String(averages.games)} note="Based on saved player events" icon={Activity}/><Metric label="POINTS / GAME" value={averages.points.toFixed(1)} note="PPG" icon={Trophy} tone="orange"/><Metric label="REBOUNDS / GAME" value={averages.rebounds.toFixed(1)} note="RPG" icon={Users} tone="blue"/><Metric label="ASSISTS / GAME" value={averages.assists.toFixed(1)} note="APG" icon={Award} tone="purple"/></div><div className="metrics-grid compact"><Metric label="STEALS / GAME" value={averages.steals.toFixed(1)} note="SPG" icon={ShieldCheck}/><Metric label="BLOCKS / GAME" value={averages.blocks.toFixed(1)} note="BPG" icon={Flag} tone="green"/><Metric label="TURNOVERS / GAME" value={averages.turnovers.toFixed(1)} note="TPG" icon={Activity} tone="orange"/></div></Panel>
+    </div>
+    <Panel title="Team assignment history"><div className="table-wrap"><table><thead><tr><th>TEAM</th><th>SEASON</th><th>POSITION</th><th>JERSEY</th><th>STATUS</th></tr></thead><tbody>{assignments.map(row=><tr key={row.id}><td>{row.teams?.name??'Team'}</td><td>{row.seasons?.name??'—'}</td><td>{row.position??'—'}</td><td>{row.jersey_number??'—'}</td><td>{row.status}</td></tr>)}</tbody></table>{!rosters.loading&&!assignments.length&&<div className="empty-state">Assign this player to a team roster to show team and position.</div>}</div></Panel>
+  </>;
 }
 
 function BulkPlayerPhotoUpload({onUploaded}:{onUploaded:()=>void}) {
