@@ -13,13 +13,28 @@ import { supabase } from '../lib/supabase';
 import { getWorkspace } from '../lib/workspaceData';
 
 async function getBasketballRuleDefaults(): Promise<BasketballRules> {
-  const { data, error } = await Promise.race([
-    supabase.rpc('get_basketball_rule_defaults'),
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Rule defaults request timed out after 12 seconds. Verify the get_basketball_rule_defaults RPC and database access, then retry.')), 12000)),
-  ]);
-  if (error) throw error;
-  if (!data || typeof data !== 'object') throw new Error('Basketball rule defaults are missing in the database. Apply migration 0004.');
-  return data as BasketballRules;
+  // Supabase client automatically attaches the project's apikey and user session.
+  // Opening the RPC URL directly in a browser is not a valid API test.
+  const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Rule defaults request timed out after 12 seconds. Check the browser Network response for the RPC request.')), 12000));
+  let rpcFailure = '';
+  try {
+    const { data, error } = await Promise.race([supabase.rpc('get_basketball_rule_defaults'), timeout]);
+    if (error) throw error;
+    if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.periodLengthMinutes === 'number') return data as BasketballRules;
+    rpcFailure = 'RPC returned empty or invalid rule defaults for this user.';
+  } catch (error) {
+    const details = error as {message?:string;code?:string;details?:string;hint?:string};
+    rpcFailure = [details.message || String(error), details.code, details.details, details.hint].filter(Boolean).join(' | ');
+  }
+  // A user-specific override may be absent; the shared BASKETBALL defaults are still valid.
+  const { data: shared, error: sharedError } = await supabase.from('basketball_rule_settings')
+    .select('rule_settings').eq('sport', 'BASKETBALL').is('user_id', null).limit(1).maybeSingle();
+  if (!sharedError && shared?.rule_settings && typeof shared.rule_settings === 'object' &&
+      typeof (shared.rule_settings as BasketballRules).periodLengthMinutes === 'number') {
+    return shared.rule_settings as BasketballRules;
+  }
+  const fallbackDetail = sharedError ? `${sharedError.message} (${sharedError.code || 'unknown code'})` : 'No accessible shared default record.';
+  throw new Error(`Unable to load basketball rule defaults. RPC: ${rpcFailure} Shared defaults: ${fallbackDetail}`);
 }
 
 type Row = { cells: string[]; status?: string };
@@ -181,7 +196,7 @@ export function Competition() {
     catch(e){setRulesError(e instanceof Error?e.message:'Unable to update competition status.');}
     finally{setBusy(false);}
   }
-  useEffect(()=>{if(!selectedCompetitionId&&competitionsData.rows[0])setSelectedCompetitionId(competitionsData.rows[0].id);},[selectedCompetitionId,competitionsData.rows]);
+  useEffect(()=>{if(!creatingCompetition&&!selectedCompetitionId&&competitionsData.rows[0])setSelectedCompetitionId(competitionsData.rows[0].id);},[creatingCompetition,selectedCompetitionId,competitionsData.rows]);
   useEffect(()=>{if(requestedCompetitionId&&competitionsData.rows.some(row=>row.id===requestedCompetitionId)){setSelectedCompetitionId(requestedCompetitionId);setCreatingCompetition(false);setDetailOpen(true);setTab('Competition list');}},[requestedCompetitionId,competitionsData.rows]);
   useEffect(() => {
     let cancelled = false;
@@ -216,7 +231,7 @@ export function Competition() {
       if(seasonId)await seasonsData.update(seasonId,{name:seasonName.trim()});else seasonId=await seasonsData.insert({name:seasonName.trim(),active:true});
       if (activeCompetition) await competitionsData.update(activeCompetition.id, { name: competitionName.trim(), format: competitionFormat, rule_settings: rules,league_id:leagueId,season_id:seasonId,min_teams:minTeams,max_teams:maxTeams });
       else {const id=await competitionsData.insert({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, rule_version: 1,league_id:leagueId,season_id:seasonId,min_teams:minTeams,max_teams:maxTeams });setSelectedCompetitionId(id);setCreatingCompetition(false);}
-      setSaved(true);setDetailOpen(true);
+      setSaved(true);setDetailOpen(true);setRulesNotice(activeCompetition ? 'Competition rules and details saved successfully.' : 'Competition created successfully. You can now continue with team and player registration.');
     } catch (e) { setRulesError(leagueErrorMessage(e)); }
   }
   async function saveMyDefaults() {
