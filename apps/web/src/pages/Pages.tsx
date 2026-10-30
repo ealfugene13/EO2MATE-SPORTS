@@ -284,9 +284,21 @@ export function Competition() {
     try {
       let seasonId=activeCompetition?.season_id??null;
       if(seasonId)await seasonsData.update(seasonId,{name:seasonName.trim()});else seasonId=await seasonsData.insert({name:seasonName.trim(),active:true});
-      if (activeCompetition) await competitionsData.update(activeCompetition.id, { name: competitionName.trim(), format: competitionFormat, rule_settings: rules,league_id:leagueId,season_id:seasonId,min_teams:minTeams,max_teams:maxTeams });
+      if (activeCompetition) {
+        const { data: updatedCompetition, error: updateError } = await supabase.from('competitions')
+          .update({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, league_id: leagueId, season_id: seasonId, min_teams: minTeams, max_teams: maxTeams })
+          .eq('id', activeCompetition.id)
+          .eq('organization_id', competitionsData.workspace?.id)
+          .select('id,status,name')
+          .maybeSingle();
+        if (updateError) throw updateError;
+        if (!updatedCompetition) throw new Error('No competition was updated. Refresh the page and confirm you still have edit access.');
+        await competitionsData.reload(true);
+      }
       else {const id=await competitionsData.insert({ name: competitionName.trim(), format: competitionFormat, rule_settings: rules, rule_version: 1,league_id:leagueId,season_id:seasonId,min_teams:minTeams,max_teams:maxTeams });setSelectedCompetitionId(id);setCreatingCompetition(false);await competitionsData.reload(true);}
-      setSaved(true);setDetailOpen(true);setRulesNotice(activeCompetition ? 'Competition rules and details saved successfully.' : 'Competition created successfully. You can now continue with team and player registration.');
+      setSaved(true);setDetailOpen(true);setRulesNotice(activeCompetition
+        ? `Rules and details saved for ${competitionName.trim()}. Status: ${activeCompetition.status.replaceAll('_', ' ')}. Saving rules keeps the competition in Draft; submit it for review when ready.`
+        : `${competitionName.trim()} was created successfully. Status: Draft. Submit it for review when the competition details and rules are ready.`);
     } catch (e) { setRulesError(leagueErrorMessage(e)); }
     finally { setBusy(false); }
   }
@@ -438,7 +450,10 @@ export function Competition() {
   const reviewCount=competitionsData.rows.filter(row=>row.status==='PENDING_REVIEW').length;
   const approvedCount=competitionsData.rows.filter(row=>row.status==='APPROVED').length;
   const listing=(rows:CompetitionRow[])=><div className="table-wrap"><table><thead><tr><th>COMPETITION</th><th>LEAGUE</th><th>SEASON</th><th>FORMAT</th><th>STATUS</th><th>RULES</th></tr></thead><tbody>{rows.map(item=><tr key={item.id}><td><button className="text-link" onClick={()=>openCompetition(item.id)}><b>{item.name}</b> <ArrowRight size={13}/></button></td><td>{leagueName(item.league_id)}</td><td>{item.seasons?.name??'—'}</td><td>{item.format.replaceAll('_',' ')}</td><td><Pill tone={item.status==='APPROVED'?'soft-green':item.status==='PENDING_REVIEW'?'soft-orange':'neutral'}>{item.status.replaceAll('_',' ')}</Pill></td><td><Button onClick={()=>openCompetition(item.id)}>View rules</Button></td></tr>)}</tbody></table>{rows.length===0&&<div className="empty-state">No competitions found. Create a competition to begin.</div>}</div>;
-  return <><PageTitle eyebrow="COMPETITION MANAGEMENT" title="Competition" subtitle="Review competitions, inspect applied basketball rules, and lock approved competitions." action={<Button variant="primary" onClick={startNew}><Plus size={15}/> Create competition</Button>}/>
+  const pageTitle = tab === 'Competition list' && detailOpen
+    ? creatingCompetition ? 'Create competition' : activeCompetition?.name ?? 'Loading competition'
+    : 'Competition';
+  return <><PageTitle eyebrow="COMPETITION MANAGEMENT" title={pageTitle} subtitle="Review competitions, inspect applied basketball rules, and lock approved competitions." action={<Button variant="primary" onClick={startNew}><Plus size={15}/> Create competition</Button>}/>
     <div className="tab-row">{(['Dashboard','Competition list'] as const).map(value=><button key={value} className={tab===value?'selected':''} onClick={()=>{setTab(value);setDetailOpen(false);}}>{value}{value==='Competition list'&&<span>{total}</span>}</button>)}</div>
     <DataState loading={competitionsData.loading||seasonsData.loading||leaguesData.loading} error={competitionsData.error||seasonsData.error||leaguesData.error} onRetry={() => {void competitionsData.reload();void seasonsData.reload();void leaguesData.reload();}}/>
     {tab==='Dashboard'&&<><div className="metrics-grid"><Metric label="TOTAL COMPETITIONS" value={String(total)} note="Current organization" icon={Trophy}/><Metric label="DRAFT" value={String(draftCount)} note="Editable" icon={Clock3} tone="blue"/><Metric label="PENDING REVIEW" value={String(reviewCount)} note="Awaiting owner approval" icon={ShieldCheck} tone="orange"/><Metric label="APPROVED" value={String(approvedCount)} note="Rules locked" icon={CheckCircle2} tone="green"/></div><Panel title="Recent competitions" action={<button className="text-link" onClick={()=>setTab('Competition list')}>View all <ArrowRight size={14}/></button>}>{listing(competitionsData.rows.slice(0,5))}</Panel></>}
