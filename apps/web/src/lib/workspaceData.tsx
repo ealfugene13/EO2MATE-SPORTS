@@ -22,8 +22,9 @@ export function useWorkspaceRows<T extends object>(table: string, columns: strin
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const reload = useCallback(async () => {
-    setLoading(true); setError('');
+  const reload = useCallback(async (keepExistingRows = false) => {
+    if (!keepExistingRows) setLoading(true);
+    setError('');
     try {
       const org = await getWorkspace(); setWorkspace(org);
       const { data, error: queryError } = await supabase.from(table).select(columns)
@@ -41,14 +42,14 @@ export function useWorkspaceRows<T extends object>(table: string, columns: strin
     const org = workspace ?? await getWorkspace();
     const { data, error: insertError } = await supabase.from(table).insert({ ...values, organization_id: org.id }).select('id').single();
     if (insertError) throw insertError;
-    await reload();
+    await reload(true);
     return data.id as string;
   }, [reload, table, workspace]);
   const update = useCallback(async (id: string, values: Row) => {
     const org = workspace ?? await getWorkspace();
     const { error: updateError } = await supabase.from(table).update(values).eq('id', id).eq('organization_id', org.id);
     if (updateError) throw updateError;
-    await reload();
+    await reload(true);
   }, [reload, table, workspace]);
   return { rows, workspace, loading, error, reload, insert, update };
 }
