@@ -261,7 +261,7 @@ export function Competition() {
       supabase.from('games').select('id,home_score,away_score,status,scheduled_at,home_team:teams!games_home_team_id_fkey(id,name),away_team:teams!games_away_team_id_fkey(id,name)').eq('competition_id',activeCompetition.id).order('scheduled_at',{ascending:true,nullsFirst:false}),
     ]);
     if(t.error||p.error||m.error||games.error){setRulesError(t.error?.message||p.error?.message||m.error?.message||games.error?.message||'Cannot load registrations');return;}
-    setRegisteredTeams(t.data??[]);setRegisteredPlayers(p.data??[]);setMatches(m.data??[]);setFixtureGames(games.data??[]);
+    setRegisteredTeams(t.data??[]);setRegisteredPlayers(p.data??[]);setMatches(m.data??[]);setFixtureGames((games.data??[]).map(game=>({...game,home_team:game.home_team?.[0]??null,away_team:game.away_team?.[0]??null})));
     const rosterIds=(p.data??[]).map(row=>row.player_id);
     if(rosterIds.length){const rosterResponse=await supabase.from('rosters').select('team_id,player_id,jersey_number,position,status').eq('season_id',activeCompetition.season_id).in('player_id',rosterIds);if(rosterResponse.error)setRulesError(rosterResponse.error.message);else setCompetitionRosterDetails((rosterResponse.data??[]).filter(row=>(p.data??[]).some(cp=>cp.team_id===row.team_id&&cp.player_id===row.player_id)));}
     else setCompetitionRosterDetails([]);
