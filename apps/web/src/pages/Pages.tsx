@@ -42,6 +42,11 @@ const defaultScheduleRules: Pick<BasketballRules,'scheduleDays'|'scheduleFrequen
   scheduleDays:'MIXED',scheduleFrequency:'DAILY',scheduleStartDate:'',scheduleEndDate:'',maxGamesPerDay:6,firstGameTime:'09:00',minutesBetweenGames:120,
 };
 function normalizeBasketballRules(value:Partial<BasketballRules>):BasketballRules{return {...defaultScheduleRules,...value} as BasketballRules;}
+function sameBasketballRules(left:Partial<BasketballRules>|null,right:Partial<BasketballRules>|null):boolean{
+  if(!left||!right)return false;
+  const normalizedLeft=normalizeBasketballRules(left);const normalizedRight=normalizeBasketballRules(right);
+  return (Object.keys(normalizedLeft) as (keyof BasketballRules)[]).every(key=>normalizedLeft[key]===normalizedRight[key]);
+}
 function getEligibleScheduleDates(rules:BasketballRules):string[]{
   if(!/^\d{4}-\d{2}-\d{2}$/.test(rules.scheduleStartDate)||!/^\d{4}-\d{2}-\d{2}$/.test(rules.scheduleEndDate))return [];
   const start=Date.parse(`${rules.scheduleStartDate}T00:00:00Z`),end=Date.parse(`${rules.scheduleEndDate}T00:00:00Z`);
@@ -239,10 +244,11 @@ export function Competition() {
     if(status==='PENDING_REVIEW'){
       if(!leagueId||!leaguesData.rows.some(item=>item.id===leagueId)){setRulesError('Select a valid league before submitting this competition for review.');return;}
       if(!competitionName.trim()||!seasonName.trim()){setRulesError('Enter a competition name and season before submitting for review.');return;}
-      const detailsChanged=activeCompetition.league_id!==leagueId||activeCompetition.name!==competitionName.trim()||activeCompetition.format!==(competitionFormat==='ROUND_ROBIN'?'ROUND_ROBIN_SINGLE':competitionFormat)||activeCompetition.min_teams!==minTeams||activeCompetition.max_teams!==maxTeams||activeCompetition.seasons?.name!==seasonName.trim()||JSON.stringify(activeCompetition.rule_settings)!==JSON.stringify(rules);
+      if(!rules){setRulesError('Load and save the game schedule rules before submitting for review.');return;}
+      const savedSeasonName=seasonsData.rows.find(item=>item.id===activeCompetition.season_id)?.name??activeCompetition.seasons?.name??'';
+      const detailsChanged=activeCompetition.league_id!==leagueId||activeCompetition.name!==competitionName.trim()||activeCompetition.format!==(competitionFormat==='ROUND_ROBIN'?'ROUND_ROBIN_SINGLE':competitionFormat)||activeCompetition.min_teams!==minTeams||activeCompetition.max_teams!==maxTeams||savedSeasonName!==seasonName.trim()||!sameBasketballRules(activeCompetition.rule_settings,rules);
       if(detailsChanged){setRulesError('Save the current competition details and rules before submitting for review.');return;}
       if(!activeCompetition.league_id){setRulesError('Assign a league and save this competition before submitting it for review.');return;}
-      if(!rules){setRulesError('Load and save the game schedule rules before submitting for review.');return;}
       const scheduleCheck=assessSchedule(rules,activeCompetition.format,scheduleTeamCount(activeCompetition.format,minTeams,maxTeams));if(!scheduleCheck.ok){setRulesError(scheduleCheck.message);return;}
     }
     setBusy(true);setRulesError('');setRulesNotice('');
