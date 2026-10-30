@@ -5,6 +5,7 @@ export type BasketballRules = {
   scheduleEndDate: string;
   maxGamesPerDay: number;
   firstGameTime: string;
+  estimatedGameDurationMinutes: number;
   minutesBetweenGames: number;
   periodLengthMinutes: number;
   firstHalfTimeouts: number;
