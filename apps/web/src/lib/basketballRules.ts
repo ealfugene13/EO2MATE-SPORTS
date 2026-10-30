@@ -1,4 +1,11 @@
 export type BasketballRules = {
+  scheduleDays: 'WEEKENDS_ONLY' | 'WEEKDAYS_ONLY' | 'MIXED';
+  scheduleFrequency: 'DAILY' | 'EVERY_OTHER_DAY' | 'EVERY_THIRD_DAY';
+  scheduleStartDate: string;
+  scheduleEndDate: string;
+  maxGamesPerDay: number;
+  firstGameTime: string;
+  minutesBetweenGames: number;
   periodLengthMinutes: number;
   firstHalfTimeouts: number;
   secondHalfTimeouts: number;

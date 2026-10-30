@@ -20,7 +20,7 @@ async function getBasketballRuleDefaults(): Promise<BasketballRules> {
   try {
     const { data, error } = await Promise.race([supabase.rpc('get_basketball_rule_defaults'), timeout]);
     if (error) throw error;
-    if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.periodLengthMinutes === 'number') return data as BasketballRules;
+    if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.periodLengthMinutes === 'number') return normalizeBasketballRules(data as Partial<BasketballRules>);
     rpcFailure = 'RPC returned empty or invalid rule defaults for this user.';
   } catch (error) {
     const details = error as {message?:string;code?:string;details?:string;hint?:string};
@@ -31,13 +31,48 @@ async function getBasketballRuleDefaults(): Promise<BasketballRules> {
     .select('rule_settings').eq('sport', 'BASKETBALL').is('user_id', null).limit(1).maybeSingle();
   if (!sharedError && shared?.rule_settings && typeof shared.rule_settings === 'object' &&
       typeof (shared.rule_settings as BasketballRules).periodLengthMinutes === 'number') {
-    return shared.rule_settings as BasketballRules;
+    return normalizeBasketballRules(shared.rule_settings as Partial<BasketballRules>);
   }
   const fallbackDetail = sharedError ? `${sharedError.message} (${sharedError.code || 'unknown code'})` : 'No accessible shared default record.';
   throw new Error(`Unable to load basketball rule defaults. RPC: ${rpcFailure} Shared defaults: ${fallbackDetail}`);
 }
 
 type Row = { cells: string[]; status?: string };
+const defaultScheduleRules: Pick<BasketballRules,'scheduleDays'|'scheduleFrequency'|'scheduleStartDate'|'scheduleEndDate'|'maxGamesPerDay'|'firstGameTime'|'minutesBetweenGames'> = {
+  scheduleDays:'MIXED',scheduleFrequency:'DAILY',scheduleStartDate:'',scheduleEndDate:'',maxGamesPerDay:6,firstGameTime:'09:00',minutesBetweenGames:120,
+};
+function normalizeBasketballRules(value:Partial<BasketballRules>):BasketballRules{return {...defaultScheduleRules,...value} as BasketballRules;}
+function getEligibleScheduleDates(rules:BasketballRules):string[]{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(rules.scheduleStartDate)||!/^\d{4}-\d{2}-\d{2}$/.test(rules.scheduleEndDate))return [];
+  const start=Date.parse(`${rules.scheduleStartDate}T00:00:00Z`),end=Date.parse(`${rules.scheduleEndDate}T00:00:00Z`);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>5*366*86400000)return [];
+  const step=rules.scheduleFrequency==='EVERY_OTHER_DAY'?2:rules.scheduleFrequency==='EVERY_THIRD_DAY'?3:1;
+  const result:string[]=[];let eligibleIndex=0;
+  for(let time=start;time<=end;time+=86400000){const day=new Date(time).getUTCDay();const allowed=rules.scheduleDays==='MIXED'||(rules.scheduleDays==='WEEKENDS_ONLY'&&(day===0||day===6))||(rules.scheduleDays==='WEEKDAYS_ONLY'&&day>=1&&day<=5);if(allowed){if(eligibleIndex%step===0)result.push(new Date(time).toISOString().slice(0,10));eligibleIndex++;}}
+  return result;
+}
+function requiredGames(teamCount:number,format:string):number{return format==='ROUND_ROBIN_DOUBLE'?teamCount*(teamCount-1):format==='SINGLE_ELIMINATION'?teamCount-1:teamCount*(teamCount-1)/2;}
+function assessSchedule(rules:BasketballRules,format:string,teamCount:number):{ok:boolean;message:string;games:number;slots:number;dates:number}{
+  if(!rules.scheduleStartDate||!rules.scheduleEndDate)return {ok:false,message:'Choose both a schedule start date and end date.',games:0,slots:0,dates:0};
+  if(rules.scheduleEndDate<rules.scheduleStartDate)return {ok:false,message:'The end date must be on or after the start date.',games:0,slots:0,dates:0};
+  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(rules.firstGameTime))return {ok:false,message:'Choose a valid first game time.',games:0,slots:0,dates:0};
+  if(!Number.isInteger(rules.maxGamesPerDay)||rules.maxGamesPerDay<1||rules.maxGamesPerDay>64)return {ok:false,message:'Maximum games per day must be from 1 to 64.',games:0,slots:0,dates:0};
+  if(!Number.isInteger(rules.minutesBetweenGames)||rules.minutesBetweenGames<15||rules.minutesBetweenGames>360)return {ok:false,message:'Game interval must be between 15 and 360 minutes.',games:0,slots:0,dates:0};
+  const dates=getEligibleScheduleDates(rules);if(!dates.length)return {ok:false,message:'No eligible game dates match the selected days and frequency.',games:0,slots:0,dates:0};
+  const games=requiredGames(teamCount,format),gamesPerDay=Math.min(rules.maxGamesPerDay,Math.floor(teamCount/2)),slots=dates.length*gamesPerDay;
+  const [firstHour,firstMinute]=rules.firstGameTime.split(':').map(Number);if(firstHour*60+firstMinute+(gamesPerDay-1)*rules.minutesBetweenGames>23*60+59)return {ok:false,message:'The first game time and interval push games past midnight. Reduce the daily limit or interval, or choose an earlier start time.',games,slots,dates:dates.length};
+  if(slots<games)return {ok:false,message:`This schedule fits ${slots} games across ${dates.length} eligible dates, but ${games} games are required for ${teamCount} teams. Extend the date range, allow more days, increase the daily limit, or reduce the team limit.`,games,slots,dates:dates.length};
+  return {ok:true,message:`Fits ${games} games across ${dates.length} eligible dates (${gamesPerDay} per day maximum).`,games,slots,dates:dates.length};
+}
+function scheduleTeamCount(format:string,minTeams:number,maxTeams:number):number{
+  if(format!=='SINGLE_ELIMINATION')return maxTeams;
+  const supported=[2,4,8,16,32,64,128].filter(n=>n>=minTeams&&n<=maxTeams);return supported[supported.length-1]??maxTeams;
+}
+function buildGameSchedule(matches:{game_id:string|null;home_team_id:string|null;away_team_id:string|null;round_no:number;slot_no:number}[],rules:BasketballRules):{game_id:string;scheduled_at:string}[]{
+  const dates=getEligibleScheduleDates(rules);const [hour,minute]=rules.firstGameTime.split(':').map(Number);const pending=matches.filter(match=>match.game_id&&match.home_team_id&&match.away_team_id).slice().sort((a,b)=>a.round_no-b.round_no||a.slot_no-b.slot_no);const plan:{game_id:string;scheduled_at:string}[]=[];
+  for(const date of dates){const usedTeams=new Set<string>();let gamesToday=0;for(let i=0;i<pending.length&&gamesToday<rules.maxGamesPerDay;){const match=pending[i];if(usedTeams.has(match.home_team_id!)||usedTeams.has(match.away_team_id!)){i++;continue;}const totalMinutes=hour*60+minute+gamesToday*rules.minutesBetweenGames;const timeLabel=`${String(Math.floor(totalMinutes/60)).padStart(2,'0')}:${String(totalMinutes%60).padStart(2,'0')}`;plan.push({game_id:match.game_id!,scheduled_at:new Date(`${date}T${timeLabel}:00+08:00`).toISOString()});usedTeams.add(match.home_team_id!);usedTeams.add(match.away_team_id!);pending.splice(i,1);gamesToday++;}}
+  return plan;
+}
 type NumberRuleKey = { [K in keyof BasketballRules]: BasketballRules[K] extends number ? K : never }[keyof BasketballRules];
 type BooleanRuleKey = { [K in keyof BasketballRules]: BasketballRules[K] extends boolean ? K : never }[keyof BasketballRules];
 const ruleBounds: Record<NumberRuleKey, [number, number]> = {
@@ -48,6 +83,7 @@ const ruleBounds: Record<NumberRuleKey, [number, number]> = {
   ejectionUnsportsmanlikeLimit: [1, 10], ejectionMixedTechnicalLimit: [1, 10],
   ejectionMixedUnsportsmanlikeLimit: [1, 10], overtimeMinutes: [1, 20], overtimeTimeouts: [0, 10],
   clockStopLastMinutes: [0, 10],
+  maxGamesPerDay:[1,64],minutesBetweenGames:[15,360],
 };
 const initialEvents = [
   { id: 1, time: '06:42', name: 'Alex Cruz', number: '23', action: '2PT made', side: 'Warriors', points: 2 },
@@ -206,6 +242,8 @@ export function Competition() {
       const detailsChanged=activeCompetition.league_id!==leagueId||activeCompetition.name!==competitionName.trim()||activeCompetition.format!==(competitionFormat==='ROUND_ROBIN'?'ROUND_ROBIN_SINGLE':competitionFormat)||activeCompetition.min_teams!==minTeams||activeCompetition.max_teams!==maxTeams||activeCompetition.seasons?.name!==seasonName.trim()||JSON.stringify(activeCompetition.rule_settings)!==JSON.stringify(rules);
       if(detailsChanged){setRulesError('Save the current competition details and rules before submitting for review.');return;}
       if(!activeCompetition.league_id){setRulesError('Assign a league and save this competition before submitting it for review.');return;}
+      if(!rules){setRulesError('Load and save the game schedule rules before submitting for review.');return;}
+      const scheduleCheck=assessSchedule(rules,activeCompetition.format,scheduleTeamCount(activeCompetition.format,minTeams,maxTeams));if(!scheduleCheck.ok){setRulesError(scheduleCheck.message);return;}
     }
     setBusy(true);setRulesError('');setRulesNotice('');
     try { const {error}=await supabase.rpc('transition_competition_status',{p_competition_id:activeCompetition.id,p_new_status:status});if(error)throw error;await competitionsData.reload(true);setRulesNotice(status==='APPROVED'?'Competition approved and permanently locked.':'Competition submitted for owner review.'); }
@@ -219,7 +257,7 @@ export function Competition() {
     if (activeCompetition) {
       setLeagueId(activeCompetition.league_id??''); setCompetitionName(activeCompetition.name); setSeasonName(activeCompetition.seasons?.name??'');
       setCompetitionFormat(activeCompetition.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN_SINGLE' : activeCompetition.format);setMinTeams(activeCompetition.min_teams??2);setMaxTeams(activeCompetition.max_teams??64);
-      setRules(activeCompetition.rule_settings);
+      setRules(normalizeBasketballRules(activeCompetition.rule_settings));
     } else if (creatingCompetition || !competitionsData.loading) {
       setRulesError('');setDefaultLoading(true);
       void getBasketballRuleDefaults().then(value => { if (!cancelled) {setRules(value);setRulesError('');} })
@@ -240,6 +278,7 @@ export function Competition() {
     if(!Number.isInteger(minTeams)||!Number.isInteger(maxTeams)||minTeams<2||maxTeams<minTeams||maxTeams>128){setRulesError('Team limits must be whole numbers between 2 and 128, with maximum at least minimum.');return;}
     if(competitionFormat==='SINGLE_ELIMINATION' && (minTeams%2!==0||maxTeams%2!==0)){setRulesError('Single elimination requires even minimum and maximum team limits.');return;}
     if(competitionFormat==='SINGLE_ELIMINATION' && ![2,4,8,16,32,64,128].some(n=>n>=minTeams&&n<=maxTeams)){setRulesError('Single elimination requires at least one supported bracket size (2, 4, 8, 16, 32, 64, 128) within the team limits.');return;}
+    const scheduleCheck=assessSchedule(rules,competitionFormat,scheduleTeamCount(competitionFormat,minTeams,maxTeams));if(!scheduleCheck.ok){setRulesError(scheduleCheck.message);return;}
     if (!competitionName.trim()||!seasonName.trim()) { setRulesError('Enter both a competition name and season name before saving.'); return; }
     setRulesError(''); setRulesNotice(''); setSaved(false); setBusy(true);
     try {
@@ -262,7 +301,7 @@ export function Competition() {
     setRulesError(''); setRulesNotice('');
     const { data, error } = await supabase.rpc('restore_my_basketball_rule_settings');
     if (error) { setRulesError(error.message); return; }
-    setRules(data as BasketballRules);
+    setRules(normalizeBasketballRules(data as Partial<BasketballRules>));
     setRulesNotice('Your personal defaults were removed and restored from the shared database defaults. The current competition changes only if you click Save rule set.');
   }
   async function reloadRegistrations(){
@@ -368,10 +407,21 @@ export function Competition() {
     }catch(e){setImportFailure(describeBulkImportError(e));}
     finally{setBulkBusy(false);}
   }
+  async function applyScheduleToGames(competitionId=activeCompetition?.id){
+    if(!competitionId||!rules||!activeCompetition)throw new Error('Competition schedule rules are unavailable.');
+    const check=assessSchedule(rules,activeCompetition.format,registeredTeams.length);if(!check.ok)throw new Error(check.message);
+    const {data:fixtures,error:fixtureError}=await supabase.from('competition_matches').select('game_id,home_team_id,away_team_id,round_no,slot_no').eq('competition_id',competitionId).order('round_no').order('slot_no');
+    if(fixtureError)throw fixtureError;
+    const plan=buildGameSchedule(fixtures??[],rules);if(!plan.length)throw new Error('No assigned matchups are ready to schedule. Confirm the competition generated fixtures with teams.');
+    const {data,error}=await supabase.rpc('apply_competition_game_schedule',{p_competition_id:competitionId,p_schedule:plan});if(error)throw error;
+    return Number(data??plan.length);
+  }
+  async function scheduleGamesNow(){setBusy(true);setRulesError('');try{const count=await applyScheduleToGames();await reloadRegistrations();setRulesNotice(`${count} game dates assigned from the saved schedule rules.`);}catch(error){setRulesError(error instanceof Error?error.message:'Unable to apply the saved game schedule.');}finally{setBusy(false);}}
   async function startCompetition(){
     if(!activeCompetition)return;
+    const scheduleCheck=rules?assessSchedule(rules,activeCompetition.format,registeredTeams.length):{ok:false,message:'Load the competition rules before starting.'};if(!scheduleCheck.ok){setRulesError(scheduleCheck.message);return;}
     setStartConfirmation(false);setBusy(true);setRulesError('');setRulesNotice('');
-    try{const {data,error}=await supabase.rpc('start_sports_competition',{p_competition_id:activeCompetition.id});if(error)throw error;await competitionsData.reload(true);await reloadRegistrations();setRulesNotice(`Competition started; ${data} first-stage games generated.`);}
+    try{const {data,error}=await supabase.rpc('start_sports_competition',{p_competition_id:activeCompetition.id});if(error)throw error;await competitionsData.reload(true);const scheduled=await applyScheduleToGames(activeCompetition.id);await reloadRegistrations();setRulesNotice(`Competition started; ${data} games generated and ${scheduled} match dates assigned.`);}
     catch(e){const problem=e as {message?:string;details?:string;hint?:string;code?:string};setRulesError([problem.message||'Unable to start competition',problem.details,problem.hint,problem.code&&`Error code: ${problem.code}`].filter(Boolean).join('\n'));}
     finally{setBusy(false);}
   }
@@ -380,8 +430,9 @@ export function Competition() {
   const bracketTargetHigh=registeredTeams.length>=2 ? 2**Math.ceil(Math.log2(registeredTeams.length)) : 2;
   const bracketCountMessage=bracketCountInvalid ? `Registered: ${registeredTeams.length}. This single-elimination scheduler does not support byes. ${bracketTargetLow===bracketTargetHigh?`Register ${bracketTargetHigh} teams.`:`Use ${bracketTargetLow} teams (remove ${registeredTeams.length-bracketTargetLow}) or ${bracketTargetHigh} teams (add ${bracketTargetHigh-registeredTeams.length}).`} Team registrations can be changed while APPROVED; approved rules cannot be edited.` : '';
   const teamLimitInvalid=!!activeCompetition&&(registeredTeams.length<activeCompetition.min_teams||registeredTeams.length>activeCompetition.max_teams);
+  const startScheduleCheck=activeCompetition&&rules?assessSchedule(rules,activeCompetition.format,registeredTeams.length):null;
   const startOwnerOnly=competitionsData.workspace?.role!=='OWNER';
-  const startBlockedReasons=[...(teamLimitInvalid&&activeCompetition?[`Team count must be between ${activeCompetition.min_teams} and ${activeCompetition.max_teams}.`]:[]),...(bracketCountInvalid?[bracketCountMessage]:[]),...(startOwnerOnly?['Only the organization OWNER can start this competition.']:[])];
+  const startBlockedReasons=[...(teamLimitInvalid&&activeCompetition?[`Team count must be between ${activeCompetition.min_teams} and ${activeCompetition.max_teams}.`]:[]),...(bracketCountInvalid?[bracketCountMessage]:[]),...(startScheduleCheck&&!startScheduleCheck.ok?[startScheduleCheck.message]:[]),...(startOwnerOnly?['Only the organization OWNER can start this competition.']:[])];
   const total=competitionsData.rows.length;
   const draftCount=competitionsData.rows.filter(row=>row.status==='DRAFT').length;
   const reviewCount=competitionsData.rows.filter(row=>row.status==='PENDING_REVIEW').length;
@@ -429,6 +480,7 @@ export function Competition() {
       <Panel title={creatingCompetition?"Create new competition":"Competition details"}><div className="field-grid">{creatingCompetition&&<div className="span-2 callout">Creating a new competition. Choose a league, enter the competition and season names, then click Save rule set. Validation errors appear in a popup.</div>}{!leaguesData.loading&&leaguesData.rows.length===0&&<div className="span-2 form-error">No league exists for this organization. Create a league before creating a competition.</div>}<label className="span-2">League *<select value={leagueId} disabled={isReadOnly} onChange={e=>{setLeagueId(e.target.value);setRulesError('');}} required><option value="">Select a league (required)</option>{leaguesData.rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label>Competition name<input value={competitionName} onChange={e=>setCompetitionName(e.target.value)} placeholder="e.g. Community Cup 2026"/></label><label>Season name<input value={seasonName} onChange={e=>setSeasonName(e.target.value)} placeholder="e.g. 2026 Season"/></label><label>Competition format<select value={competitionFormat} onChange={e=>setCompetitionFormat(e.target.value)}><option value="ROUND_ROBIN_SINGLE">Round robin · single</option><option value="ROUND_ROBIN_DOUBLE">Round robin · double</option><option value="SINGLE_ELIMINATION">Bracket · single elimination</option></select></label><label>Minimum teams<input type="number" min={2} max={128} value={minTeams} onChange={e=>setMinTeams(Number(e.target.value))}/></label><label>Maximum teams<input type="number" min={2} max={128} value={maxTeams} onChange={e=>setMaxTeams(Number(e.target.value))}/></label>{competitionFormat==='SINGLE_ELIMINATION'&&<div className="span-2 callout">Bracket rules: minimum and maximum must be even. Without byes, the actual registered team count must be 2, 4, 8, 16, 32, 64 or 128. Invalid counts cannot start the competition.</div>}<label>Saved version<input readOnly value={activeCompetition ? `v${activeCompetition.rule_version}` : 'New rule set'}/></label></div></Panel>
       {!rules&&<div className="empty-state">{defaultLoading?'Loading rule defaults from the database…':<><p>Rule defaults unavailable. {rulesError||'Try again.'}</p><Button onClick={()=>setDefaultsRetry(value=>value+1)}>Retry loading defaults</Button></>}</div>}
       {rules&&<><Panel title="Game format"><div className="field-grid"><label>Format<input value="5 on 5 basketball" readOnly/></label>{numberField('periodLengthMinutes','Quarter length (minutes)')}{numberField('overtimeMinutes','Overtime length (minutes)')}</div></Panel>
+      <Panel title="Game schedule"><div className="field-grid"><label>Game days<select value={rules.scheduleDays} onChange={e=>{setRules(current=>current?{...current,scheduleDays:e.target.value as BasketballRules['scheduleDays']}:current);setSaved(false);}}><option value="WEEKENDS_ONLY">Weekends only</option><option value="WEEKDAYS_ONLY">Weekdays only</option><option value="MIXED">Weekdays and weekends</option></select></label><label>Frequency<select value={rules.scheduleFrequency} onChange={e=>{setRules(current=>current?{...current,scheduleFrequency:e.target.value as BasketballRules['scheduleFrequency']}:current);setSaved(false);}}><option value="DAILY">Daily · each eligible day</option><option value="EVERY_OTHER_DAY">Every other eligible day</option><option value="EVERY_THIRD_DAY">Every third eligible day</option></select></label><label>Target start date<input type="date" value={rules.scheduleStartDate} onChange={e=>{setRules(current=>current?{...current,scheduleStartDate:e.target.value}:current);setSaved(false);}}/></label><label>Target end date<input type="date" value={rules.scheduleEndDate} min={rules.scheduleStartDate||undefined} onChange={e=>{setRules(current=>current?{...current,scheduleEndDate:e.target.value}:current);setSaved(false);}}/></label><label>Maximum games per day<input type="number" min="1" max="64" value={rules.maxGamesPerDay} onChange={e=>{setRules(current=>current?{...current,maxGamesPerDay:Number(e.target.value)}:current);setSaved(false);}}/></label><label>First tip-off<input type="time" value={rules.firstGameTime} onChange={e=>{setRules(current=>current?{...current,firstGameTime:e.target.value}:current);setSaved(false);}}/></label><label>Minutes between games<input type="number" min="15" max="360" step="15" value={rules.minutesBetweenGames} onChange={e=>{setRules(current=>current?{...current,minutesBetweenGames:Number(e.target.value)}:current);setSaved(false);}}/></label></div><div className={assessSchedule(rules,competitionFormat,scheduleTeamCount(competitionFormat,minTeams,maxTeams)).ok?'success-banner':'form-error'} style={{marginTop:14}}>{assessSchedule(rules,competitionFormat,scheduleTeamCount(competitionFormat,minTeams,maxTeams)).message} The preview uses a maximum of {scheduleTeamCount(competitionFormat,minTeams,maxTeams)} teams; actual team count is checked again before start.</div><p className="rule-help">Frequency advances through eligible dates. Generated matchups receive dates and tip-off times when the competition starts; a team is scheduled at most once per day.</p></Panel>
       <Panel title="Timeout rules"><div className="field-grid">{numberField('firstHalfTimeouts','Timeouts · first half (Q1–Q2)')}{numberField('secondHalfTimeouts','Timeouts · second half (Q3–Q4)')}{numberField('fourthQuarterTimeoutRestrictionMinutes','Q4 timeout restriction window (minutes)')}{numberField('finalTwoMinuteTimeoutMax','Maximum remaining in Q4 restriction window')}{numberField('timeoutDurationSeconds','Timeout duration (seconds)')}{toggleField('headCoachRequestRequired','Require Head Coach request at scorer’s table')}</div></Panel>
       <Panel title="Fouls and ejections"><div className="field-grid">{numberField('playerFoulLimit','Personal fouls before disqualification')}{numberField('teamFoulPenaltyAt','Team foul penalty starts at foul number')}{numberField('teamFoulFreeThrows','Free throws for each defensive team foul at penalty')}{numberField('technicalFreeThrows','Free throws for a technical foul')}{numberField('ejectionTechnicalLimit','Ejection at technical fouls')}{numberField('ejectionUnsportsmanlikeLimit','Ejection at unsportsmanlike fouls')}{numberField('ejectionMixedTechnicalLimit','Mixed ejection · technical fouls')}{numberField('ejectionMixedUnsportsmanlikeLimit','Mixed ejection · unsportsmanlike fouls')}</div></Panel>
       <Panel title="Overtime and game clock"><div className="field-grid">{numberField('overtimeTimeouts','Timeouts per team · each overtime')}{numberField('clockStopLastMinutes','Clock stops during final minutes')}{toggleField('carryFourthQuarterFoulsToOvertime','Carry Q4 team fouls into first overtime')}{toggleField('runningClockEnabled','Use running time')}{toggleField('clockStopInSecondQuarter','Stop clock in final minutes of Q2')}{toggleField('clockStopInFourthQuarter','Stop clock in final minutes of Q4')}</div><p className="rule-help">These values are saved with the competition and copied into each new game's rule snapshot.</p></Panel></>}
@@ -483,10 +535,10 @@ export function Competition() {
                 <div className="sr-box"><div className="sr-muted">LIVE</div><strong style={{fontSize:25}}>{fixtureGames.filter(game=>game.status==='LIVE').length}</strong></div>
                 <div className="sr-box"><div className="sr-muted">COMPLETED</div><strong style={{fontSize:25}}>{fixtureGames.filter(game=>['FINAL','FINALIZED','COMPLETED'].includes(game.status)).length}</strong></div>
               </div>
-              <div className="sr-head"><h4 style={{margin:0}}>Next games</h4><Button onClick={()=>void reloadRegistrations()}><RefreshCw size={15}/>Refresh</Button></div>
+              <div className="sr-head"><h4 style={{margin:0}}>Next games</h4><div style={{display:'flex',gap:8}}>{activeCompetition.status==='ACTIVE'&&rules?.scheduleStartDate&&fixtureGames.some(game=>!game.scheduled_at)&&<Button onClick={()=>void scheduleGamesNow()} disabled={busy}><CalendarDays size={14}/>Apply schedule</Button>}<Button onClick={()=>void reloadRegistrations()}><RefreshCw size={15}/>Refresh</Button></div></div>
               <div className="table-wrap"><table className="sr-roster"><thead><tr><th>DATE & TIP-OFF</th><th>HOME</th><th>AWAY</th><th>SCORE</th><th>STATUS</th></tr></thead><tbody>{fixtureGames.slice().sort((a,b)=>(a.scheduled_at??'').localeCompare(b.scheduled_at??'')).slice(0,5).map(game=><tr key={game.id}><td>{game.scheduled_at?new Date(game.scheduled_at).toLocaleString():'Unscheduled'}</td><td>{game.home_team?.name??'—'}</td><td>{game.away_team?.name??'—'}</td><td>{game.home_score}–{game.away_score}</td><td>{game.status}</td></tr>)}</tbody></table>{fixtureGames.length===0&&<div className="sr-notice">No games are linked to this competition yet. Start the competition to generate its schedule.</div>}</div>
             </>:<>
-              <div className="sr-head"><span/><Button onClick={()=>void reloadRegistrations()}><RefreshCw size={15}/>Refresh</Button></div>
+              <div className="sr-head"><span/><div style={{display:'flex',gap:8}}>{activeCompetition.status==='ACTIVE'&&rules?.scheduleStartDate&&fixtureGames.some(game=>!game.scheduled_at)&&<Button onClick={()=>void scheduleGamesNow()} disabled={busy}><CalendarDays size={14}/>Apply schedule</Button>}<Button onClick={()=>void reloadRegistrations()}><RefreshCw size={15}/>Refresh</Button></div></div>
               <div className="table-wrap"><table className="sr-roster"><thead><tr><th>DATE & TIP-OFF</th><th>HOME</th><th>AWAY</th><th>SCORE</th><th>STATUS</th></tr></thead><tbody>{fixtureGames.slice().sort((a,b)=>(a.scheduled_at??'').localeCompare(b.scheduled_at??'')).map(game=><tr key={game.id}><td>{game.scheduled_at?new Date(game.scheduled_at).toLocaleString():'Unscheduled'}</td><td>{game.home_team?.name??'—'}</td><td>{game.away_team?.name??'—'}</td><td>{game.home_score}–{game.away_score}</td><td>{game.status}</td></tr>)}</tbody></table>{fixtureGames.length===0&&<div className="sr-notice">No games are linked to this competition yet.</div>}</div>
             </>}
           </div>}
