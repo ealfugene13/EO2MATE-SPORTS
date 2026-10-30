@@ -139,8 +139,9 @@ export function League() {
 }
 
 export function Competition() {
-  const [searchParams] = useSearchParams();
+  const [searchParams,setSearchParams] = useSearchParams();
   const requestedCompetitionId = searchParams.get('competition');
+  const appliedRequestedCompetitionId=useRef<string|null>(null);
   const [tab,setTab]=useState<'Dashboard'|'Competition list'>('Dashboard');
   const [detailOpen,setDetailOpen]=useState(false);
   const [busy,setBusy]=useState(false);
@@ -178,11 +179,13 @@ export function Competition() {
   const [csvFileName,setCsvFileName]=useState('');
   const csvInputRef=useRef<HTMLInputElement>(null);
   const [matches,setMatches]=useState<{id:string;round_no:number;slot_no:number;home_team_id:string|null;away_team_id:string|null;game_id?:string|null;status:string}[]>([]);
-  type CompetitionGame={id:string;home_score:number;away_score:number;status:string;scheduled_at:string|null;home_team?:{id:string;name:string}|null;away_team?:{id:string;name:string}|null};
+  type CompetitionGame={id:string;home_score:number;away_score:number;status:string;scheduled_at:string|null;home_team_id?:string|null;away_team_id?:string|null;home_team?:{id:string;name:string}|null;away_team?:{id:string;name:string}|null};
   const [fixtureGames,setFixtureGames]=useState<CompetitionGame[]>([]);
   const teamsData=useWorkspaceRows<{id:string;name:string;active:boolean}>('teams','id,name,active');
   const playersData=useWorkspaceRows<{id:string;first_name:string;last_name:string;active:boolean}>('players','id,first_name,last_name,active');
   const activeCompetition = creatingCompetition?undefined:(selectedCompetitionId?competitionsData.rows.find(row=>row.id===selectedCompetitionId):competitionsData.rows[0]);
+  const activeCompetitionIdRef=useRef<string|undefined>(undefined);activeCompetitionIdRef.current=activeCompetition?.id;
+  const registrationRequestRef=useRef(0);
   const isReadOnly=!!activeCompetition&&activeCompetition.status!=='DRAFT';
   const leagueName=(id:string|null)=>leaguesData.rows.find(row=>row.id===id)?.name??'Unassigned league';
   const leagueErrorMessage=(error:unknown)=>{
@@ -193,8 +196,8 @@ export function Competition() {
     if(/approved.*locked|pending.*read.only|submitted.*cannot/i.test(message))return 'This competition is under review or approved and cannot be modified.';
     return message;
   };
-  const startNew=()=>{setCreatingCompetition(true);setDetailOpen(true);setTab('Competition list');setRegistrationTab('Competition details');setSelectedCompetitionId('');setLeagueId(leaguesData.rows.length===1?leaguesData.rows[0].id:'');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setMinTeams(2);setMaxTeams(64);setRules(null);setRulesError('');setRulesNotice('');setSaved(false);setDefaultsRetry(v=>v+1);};
-  const openCompetition=(id:string)=>{setCreatingCompetition(false);setSelectedCompetitionId(id);setDetailOpen(true);setTab('Competition list');setRegistrationTab('Competition details');setRulesError('');setRulesNotice('');setSaved(false);};
+  const startNew=()=>{const params=new URLSearchParams(searchParams);params.delete('competition');setSearchParams(params,{replace:true});setCreatingCompetition(true);setDetailOpen(true);setTab('Competition list');setRegistrationTab('Competition details');setSelectedCompetitionId('');setLeagueId(leaguesData.rows.length===1?leaguesData.rows[0].id:'');setCompetitionName('');setSeasonName('');setCompetitionFormat('ROUND_ROBIN_SINGLE');setMinTeams(2);setMaxTeams(64);setRules(null);setRulesError('');setRulesNotice('');setSaved(false);setDefaultsRetry(v=>v+1);};
+  const openCompetition=(id:string)=>{const params=new URLSearchParams(searchParams);params.set('competition',id);setSearchParams(params,{replace:true});setCreatingCompetition(false);setSelectedCompetitionId(id);setDetailOpen(true);setTab('Competition list');setRegistrationTab('Competition details');setRulesError('');setRulesNotice('');setSaved(false);registrationRequestRef.current++;setRegisteredTeams([]);setRegisteredPlayers([]);setCompetitionRosterDetails([]);setMatches([]);setFixtureGames([]);};
   async function transition(status:'PENDING_REVIEW'|'APPROVED'){
     if(!activeCompetition)return;
     if(status==='PENDING_REVIEW'){
@@ -210,7 +213,7 @@ export function Competition() {
     finally{setBusy(false);}
   }
   useEffect(()=>{if(!creatingCompetition&&!selectedCompetitionId&&competitionsData.rows[0])setSelectedCompetitionId(competitionsData.rows[0].id);},[creatingCompetition,selectedCompetitionId,competitionsData.rows]);
-  useEffect(()=>{if(requestedCompetitionId&&competitionsData.rows.some(row=>row.id===requestedCompetitionId)){setSelectedCompetitionId(requestedCompetitionId);setCreatingCompetition(false);setDetailOpen(true);setTab('Competition list');setRegistrationTab('Competition details');}},[requestedCompetitionId,competitionsData.rows]);
+  useEffect(()=>{if(!requestedCompetitionId){appliedRequestedCompetitionId.current=null;return;}if(requestedCompetitionId!==appliedRequestedCompetitionId.current&&competitionsData.rows.some(row=>row.id===requestedCompetitionId)){appliedRequestedCompetitionId.current=requestedCompetitionId;setSelectedCompetitionId(requestedCompetitionId);setCreatingCompetition(false);setDetailOpen(true);setTab('Competition list');setRegistrationTab('Competition details');}},[requestedCompetitionId,competitionsData.rows]);
   useEffect(() => {
     let cancelled = false;
     if (activeCompetition) {
@@ -264,19 +267,21 @@ export function Competition() {
   }
   async function reloadRegistrations(){
     if(!activeCompetition)return;
+    const competitionId=activeCompetition.id;const requestId=++registrationRequestRef.current;
     const [t,p,m,games]=await Promise.all([
-      supabase.from('competition_teams').select('team_id').eq('competition_id',activeCompetition.id),
-      supabase.from('competition_players').select('team_id,player_id').eq('competition_id',activeCompetition.id),
-      supabase.from('competition_matches').select('id,round_no,slot_no,home_team_id,away_team_id,game_id,status').eq('competition_id',activeCompetition.id).order('round_no').order('slot_no'),
-      supabase.from('games').select('id,home_score,away_score,status,scheduled_at,home_team:teams!games_home_team_id_fkey(id,name),away_team:teams!games_away_team_id_fkey(id,name)').eq('competition_id',activeCompetition.id).order('scheduled_at',{ascending:true,nullsFirst:false}),
+      supabase.from('competition_teams').select('team_id').eq('competition_id',competitionId),
+      supabase.from('competition_players').select('team_id,player_id').eq('competition_id',competitionId),
+      supabase.from('competition_matches').select('id,round_no,slot_no,home_team_id,away_team_id,game_id,status').eq('competition_id',competitionId).order('round_no').order('slot_no'),
+      supabase.from('games').select('id,home_team_id,away_team_id,home_score,away_score,status,scheduled_at,home_team:teams!games_home_team_id_fkey(id,name),away_team:teams!games_away_team_id_fkey(id,name)').eq('competition_id',competitionId).order('scheduled_at',{ascending:true,nullsFirst:false}),
     ]);
+    if(requestId!==registrationRequestRef.current||activeCompetitionIdRef.current!==competitionId)return;
     if(t.error||p.error||m.error||games.error){setRulesError(t.error?.message||p.error?.message||m.error?.message||games.error?.message||'Cannot load registrations');return;}
-    setRegisteredTeams(t.data??[]);setRegisteredPlayers(p.data??[]);setMatches(m.data??[]);setFixtureGames((games.data??[]).map(game=>({...game,home_team:game.home_team?.[0]??null,away_team:game.away_team?.[0]??null})));
+    setRegisteredTeams(t.data??[]);setRegisteredPlayers(p.data??[]);setMatches(m.data??[]);setFixtureGames((games.data??[]).map(game=>{const match=(m.data??[]).find(item=>item.game_id===game.id);const homeRelation=Array.isArray(game.home_team)?game.home_team[0]??null:game.home_team??null;const awayRelation=Array.isArray(game.away_team)?game.away_team[0]??null:game.away_team??null;const homeId=game.home_team_id??match?.home_team_id??homeRelation?.id??null;const awayId=game.away_team_id??match?.away_team_id??awayRelation?.id??null;return {...game,home_team:homeRelation??(homeId?teamsData.rows.find(team=>team.id===homeId)??null:null),away_team:awayRelation??(awayId?teamsData.rows.find(team=>team.id===awayId)??null:null)};}));
     const rosterIds=(p.data??[]).map(row=>row.player_id);
-    if(rosterIds.length){const rosterResponse=await supabase.from('rosters').select('team_id,player_id,jersey_number,position,status').eq('season_id',activeCompetition.season_id).in('player_id',rosterIds);if(rosterResponse.error)setRulesError(rosterResponse.error.message);else setCompetitionRosterDetails((rosterResponse.data??[]).filter(row=>(p.data??[]).some(cp=>cp.team_id===row.team_id&&cp.player_id===row.player_id)));}
+    if(rosterIds.length){const rosterResponse=await supabase.from('rosters').select('team_id,player_id,jersey_number,position,status').eq('season_id',activeCompetition.season_id).in('player_id',rosterIds);if(requestId!==registrationRequestRef.current||activeCompetitionIdRef.current!==competitionId)return;if(rosterResponse.error)setRulesError(rosterResponse.error.message);else setCompetitionRosterDetails((rosterResponse.data??[]).filter(row=>(p.data??[]).some(cp=>cp.team_id===row.team_id&&cp.player_id===row.player_id)));}
     else setCompetitionRosterDetails([]);
   }
-  useEffect(()=>{if(activeCompetition?.id&&detailOpen)void reloadRegistrations();},[activeCompetition?.id,detailOpen]);
+  useEffect(()=>{if(activeCompetition?.id&&detailOpen){void reloadRegistrations();return ()=>{registrationRequestRef.current++;};}},[activeCompetition?.id,detailOpen]);
   async function registerTeam(teamId:string){
     if(!activeCompetition)return;
     const {error}=await supabase.rpc('register_competition_team',{p_competition_id:activeCompetition.id,p_team_id:teamId});
@@ -366,7 +371,7 @@ export function Competition() {
   async function startCompetition(){
     if(!activeCompetition)return;
     setStartConfirmation(false);setBusy(true);setRulesError('');setRulesNotice('');
-    try{const {data,error}=await supabase.rpc('start_sports_competition',{p_competition_id:activeCompetition.id});if(error)throw error;await competitionsData.reload();await reloadRegistrations();setRulesNotice(`Competition started; ${data} first-stage games generated.`);}
+    try{const {data,error}=await supabase.rpc('start_sports_competition',{p_competition_id:activeCompetition.id});if(error)throw error;await competitionsData.reload(true);await reloadRegistrations();setRulesNotice(`Competition started; ${data} first-stage games generated.`);}
     catch(e){const problem=e as {message?:string;details?:string;hint?:string;code?:string};setRulesError([problem.message||'Unable to start competition',problem.details,problem.hint,problem.code&&`Error code: ${problem.code}`].filter(Boolean).join('\n'));}
     finally{setBusy(false);}
   }
