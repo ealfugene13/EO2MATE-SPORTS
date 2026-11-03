@@ -34,7 +34,9 @@ Deno.serve(async request => {
     const early = game.status === 'SCHEDULED' && !!game.scheduled_at && new Date(game.scheduled_at).getTime() > Date.now();
     if (early) {
       const expected = Deno.env.get('EARLY_START_KEYWORD');
-      if (!expected || values.keyword !== expected) return json(request, { error: 'INVALID_EARLY_START_KEYWORD' }, 403);
+      if (!expected) return json(request, { error: 'EARLY_START_KEYWORD_NOT_CONFIGURED' }, 500);
+      if (!values.keyword?.trim()) return json(request, { error: 'EARLY_START_KEYWORD_REQUIRED' }, 403);
+      if (values.keyword.trim() !== expected) return json(request, { error: 'INVALID_EARLY_START_KEYWORD' }, 403);
     }
     const { data, error } = await admin.rpc('start_game_with_lineups', {
       p_actor: auth.user.id, p_game_id: game.id, p_home_player_ids: values.home_player_ids,
