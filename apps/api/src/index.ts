@@ -1,5 +1,5 @@
 import 'dotenv/config'; import express from 'express'; import cors from 'cors'; import helmet from 'helmet'; import {createClient} from '@supabase/supabase-js'; import {z} from 'zod';
-const app=express(); app.use(helmet()); app.use(cors({origin:process.env.WEB_ORIGIN||'http://localhost:5173'})); app.use(express.json());
+const app=express(); app.use(helmet()); const allowedOrigins=(process.env.WEB_ORIGIN||'http://localhost:5173').split(',').map(value=>value.trim()).filter(Boolean); app.use(cors({origin:(origin,callback)=>{if(!origin||allowedOrigins.includes(origin))return callback(null,true);return callback(new Error('CORS_ORIGIN_DENIED'));}})); app.use(express.json());
 const admin=createClient(process.env.SUPABASE_URL||'https://placeholder.supabase.co',process.env.SUPABASE_SERVICE_ROLE_KEY||'placeholder',{auth:{persistSession:false}});
 function userClient(req:any){return createClient(process.env.SUPABASE_URL||'https://placeholder.supabase.co',process.env.SUPABASE_ANON_KEY||'placeholder',{auth:{persistSession:false},global:{headers:{Authorization:req.headers.authorization||''}}});}
 app.get('/health',(_,res)=>res.json({ok:true,service:'sports-api'}));
