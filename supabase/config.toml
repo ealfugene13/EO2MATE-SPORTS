@@ -1,0 +1,17 @@
+[functions.me]
+verify_jwt = false
+
+[functions.organization-member-invite]
+verify_jwt = false
+
+[functions.game-start]
+verify_jwt = false
+
+[functions.game-event]
+verify_jwt = false
+
+[functions.game-substitution]
+verify_jwt = false
+
+[functions.game-event-reverse]
+verify_jwt = false
