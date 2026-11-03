@@ -1375,6 +1375,7 @@ export function LiveGame() {
   const gameEvents=gameRows.slice().sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,30);
   const reversedEventIds=new Set(gameRows.map(row=>row.reversed_event_id).filter((id):id is string=>Boolean(id)));
   const activeGameEvents=gameRows.filter(row=>row.event_type!=='REVERSAL'&&!row.reversed_event_id&&!reversedEventIds.has(row.id)).slice().sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  const sides=game?[{id:game.home_team_id,team:game.home_team,name:game.home_team?.name??'Home team',score:game.home_score,side:'HOME'},{id:game.away_team_id,team:game.away_team,name:game.away_team?.name??'Away team',score:game.away_score,side:'AWAY'}]:[];
   const possession=activeGameEvents.reduce<{teamId:string;playerId:string|null}|null>((current,event)=>{
     if(event.event_type==='PASS')return {teamId:event.team_id,playerId:event.related_player_id??event.player_id};
     if(['2PT_MADE','3PT_MADE'].includes(event.event_type)){const other=sides.find(side=>side.id!==event.team_id);return other?{teamId:other.id,playerId:null}:current;}
@@ -1385,7 +1386,6 @@ export function LiveGame() {
   },null);
   const currentClockMs=parseClock(clockText);
   const lastMissedShot=activeGameEvents.slice().reverse().find(row=>['2PT_MISSED','3PT_MISSED'].includes(row.event_type)&&row.period===period&&currentClockMs!==null&&row.clock_ms===currentClockMs);
-  const sides=game?[{id:game.home_team_id,team:game.home_team,name:game.home_team?.name??'Home team',score:game.home_score,side:'HOME'},{id:game.away_team_id,team:game.away_team,name:game.away_team?.name??'Away team',score:game.away_score,side:'AWAY'}]:[];
   const scorePeriodCount=Math.max(4,game?.current_period??1,...gameRows.map(row=>row.period));
   const scoreByPeriod=gameRows.reduce<Record<string,number>>((totals,row)=>{if(row.points)totals[`${row.team_id}:${row.period}`]=(totals[`${row.team_id}:${row.period}`]??0)+row.points;return totals;},{});
   const teamPlayers=(teamId:string)=>activeRoster.filter(row=>row.team_id===teamId&&(!game?.season_id||row.season_id===game.season_id)).slice().sort((a,b)=>(a.jersey_number??999)-(b.jersey_number??999));
