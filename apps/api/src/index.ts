@@ -20,8 +20,26 @@ app.post('/api/organization-members/invite',auth,async(req:any,res)=>{
   await admin.from('audit_log').insert({organization_id,actor_id:req.user.id,action:'INVITE',entity_type:'ORGANIZATION_MEMBER',entity_id:invited.user.id,metadata:{email,role}});
   res.status(201).json({user_id:invited.user.id,email,role});
 });
-const eventSchema=z.object({game_id:z.string().uuid(),organization_id:z.string().uuid(),team_id:z.string().uuid(),player_id:z.string().uuid().nullable().optional(),event_type:z.enum(['FT_MADE','FT_MISSED','2PT_MADE','2PT_MISSED','3PT_MADE','3PT_MISSED','REBOUND_OFF','REBOUND_DEF','ASSIST','STEAL','BLOCK','TURNOVER','FOUL','TECHNICAL_FOUL','TIMEOUT','SUB_IN','SUB_OUT']),period:z.number().int().min(1).max(20),clock_ms:z.number().int().min(0)});
+const eventSchema=z.object({game_id:z.string().uuid(),organization_id:z.string().uuid(),team_id:z.string().uuid(),player_id:z.string().uuid().nullable().optional(),related_player_id:z.string().uuid().nullable().optional(),event_type:z.enum(['PASS','FT_MADE','FT_MISSED','2PT_MADE','2PT_MISSED','3PT_MADE','3PT_MISSED','REBOUND_OFF','REBOUND_DEF','ASSIST','STEAL','BLOCK','TURNOVER','FOUL','TECHNICAL_FOUL','TIMEOUT','SUB_IN','SUB_OUT']),period:z.number().int().min(1).max(20),clock_ms:z.number().int().min(0)});
 app.post('/api/game-events',auth,async(req:any,res)=>{const parsed=eventSchema.safeParse(req.body);if(!parsed.success)return res.status(422).json(parsed.error.flatten()); const {data,error}=await userClient(req).rpc('record_game_event',{p_actor:req.user.id,p_payload:parsed.data});if(error)return res.status(400).json({error:error.message});res.status(201).json(data)});
+const earlyStartSchema=z.object({keyword:z.string().min(1).max(100)});
+app.post('/api/games/:id/start-early',auth,async(req:any,res)=>{
+  const parsed=earlyStartSchema.safeParse(req.body);if(!parsed.success)return res.status(422).json({error:'INVALID_REQUEST'});
+  const expected=process.env.EARLY_START_KEYWORD;
+  if(!expected||parsed.data.keyword!==expected)return res.status(403).json({error:'INVALID_EARLY_START_KEYWORD'});
+  const {data:game,error:gameError}=await admin.from('games').select('id,organization_id,status,scheduled_at').eq('id',req.params.id).maybeSingle();
+  if(gameError)return res.status(400).json({error:gameError.message});if(!game)return res.status(404).json({error:'GAME_NOT_FOUND'});
+  const {data:membership,error:membershipError}=await admin.from('organization_members').select('role,active').eq('organization_id',game.organization_id).eq('user_id',req.user.id).maybeSingle();
+  if(membershipError)return res.status(400).json({error:membershipError.message});
+  if(!membership?.active||!['OWNER','ADMIN','SCORER','STATISTICIAN'].includes(membership.role))return res.status(403).json({error:'FORBIDDEN'});
+  if(game.status!=='SCHEDULED')return res.status(409).json({error:'GAME_NOT_SCHEDULED'});
+  if(!game.scheduled_at||new Date(game.scheduled_at).getTime()<=Date.now())return res.status(409).json({error:'EARLY_START_NOT_REQUIRED'});
+  const {data:updated,error:updateError}=await admin.from('games').update({status:'LIVE'}).eq('id',game.id).eq('status','SCHEDULED').select('id,status').maybeSingle();
+  if(updateError)return res.status(400).json({error:updateError.message});if(!updated)return res.status(409).json({error:'GAME_STATE_CHANGED'});
+  const {error:auditError}=await admin.from('audit_log').insert({organization_id:game.organization_id,actor_id:req.user.id,action:'START_EARLY',entity_type:'GAME',entity_id:game.id,metadata:{scheduled_at:game.scheduled_at,started_at:new Date().toISOString()}});
+  if(auditError){await admin.from('games').update({status:'SCHEDULED'}).eq('id',game.id).eq('status','LIVE');return res.status(500).json({error:'EARLY_START_AUDIT_FAILED'});}
+  res.json(updated);
+});
 const substitutionSchema=z.object({game_id:z.string().uuid(),organization_id:z.string().uuid(),team_id:z.string().uuid(),player_out:z.string().uuid(),player_in:z.string().uuid(),period:z.number().int().min(1).max(20),clock_ms:z.number().int().min(0)});
 app.post('/api/game-substitutions',auth,async(req:any,res)=>{const parsed=substitutionSchema.safeParse(req.body);if(!parsed.success)return res.status(422).json(parsed.error.flatten());const {data,error}=await userClient(req).rpc('record_game_substitution',{p_actor:req.user.id,p_game_id:parsed.data.game_id,p_organization_id:parsed.data.organization_id,p_team_id:parsed.data.team_id,p_player_out:parsed.data.player_out,p_player_in:parsed.data.player_in,p_period:parsed.data.period,p_clock_ms:parsed.data.clock_ms});if(error)return res.status(400).json({error:error.message});res.status(201).json(data)});
 app.post('/api/game-events/:id/reverse',auth,async(req:any,res)=>{const {data,error}=await userClient(req).rpc('reverse_game_event',{p_actor:req.user.id,p_event_id:req.params.id,p_reason:req.body?.reason||'Operator correction'});if(error)return res.status(400).json({error:error.message});res.json(data)});
