@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: eo2mate-sports-api
+    runtime: node
+    plan: free
+    rootDir: apps/api
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WEB_ORIGIN
+        value: https://sports.eo2mate.com
+      - key: EARLY_START_KEYWORD
+        sync: false
