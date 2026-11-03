@@ -1360,7 +1360,7 @@ export function LiveGame() {
   const [passOpen,setPassOpen]=useState(false);const [passTarget,setPassTarget]=useState('');const [stealPlayer,setStealPlayer]=useState('');const [passStolenMode,setPassStolenMode]=useState(false);
   const [pendingPass,setPendingPass]=useState<{passer:string;receiver:string;teamId:string}|null>(null);
   const [assistPrompt,setAssistPrompt]=useState<{passer:string;shooter:string;teamId:string}|null>(null);
-  const [pendingMiss,setPendingMiss]=useState<{teamId:string;playerId:string}|null>(null);const [blockPlayer,setBlockPlayer]=useState('');
+  const [pendingMiss,setPendingMiss]=useState<{teamId:string;playerId:string|null}|null>(null);const [blockPlayer,setBlockPlayer]=useState('');
   const [correctEventId,setCorrectEventId]=useState('');const [correctionReason,setCorrectionReason]=useState('');
   const [earlyStartOpen,setEarlyStartOpen]=useState(false);const [earlyStartKeyword,setEarlyStartKeyword]=useState('');
   const [lineupSetupOpen,setLineupSetupOpen]=useState(false);const [homeStarterIds,setHomeStarterIds]=useState<string[]>([]);const [awayStarterIds,setAwayStarterIds]=useState<string[]>([]);const [homeCoachConfirmed,setHomeCoachConfirmed]=useState(false);const [awayCoachConfirmed,setAwayCoachConfirmed]=useState(false);const lineupPromptedGame=useRef('');
