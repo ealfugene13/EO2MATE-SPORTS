@@ -51,7 +51,8 @@ export function useWorkspaceRows<T extends object>(table: string, columns: strin
     if (updateError) throw updateError;
     await reload(true);
   }, [reload, table, workspace]);
-  return { rows, workspace, loading, error, reload, insert, update };
+  const updateRows = useCallback((updater: (current: T[]) => T[]) => setRows(updater), []);
+  return { rows, workspace, loading, error, reload, insert, update, updateRows };
 }
 
 export function DataState({ loading, error, onRetry }: { loading: boolean; error: string; onRetry?: () => void }) {
