@@ -19,152 +19,150 @@
 .empty-state { padding: 22px; color: #667085; text-align: center; font-size: 13px; }
 .public-workspace { margin-left: 0; }
 
-/* EO2MATE Sports — approved November 8 recorder UI. Scoped to live game only. */
-.live-recorder-v8{--rec-bg:#0b101b;--rec-card:#111827;--rec-line:#384457;--rec-text:#f8fafc;--rec-muted:#b6bfce;color:var(--rec-text);background:var(--rec-bg);padding:clamp(8px,1.5vw,18px);border-radius:22px;gap:12px!important}
-.live-recorder-v8 .live-scoreboard,.live-recorder-v8 .panel{background:linear-gradient(135deg,#121a2a,#090e18)!important;border:1px solid var(--rec-line)!important;border-radius:20px!important;color:var(--rec-text)!important;box-shadow:none!important;min-width:0}
-.live-recorder-v8 .panel h2,.live-recorder-v8 .panel h3,.live-recorder-v8 .panel-heading,.live-recorder-v8 .live-lineup-head strong,.live-recorder-v8 .live-roster-label,.live-recorder-v8 .live-score-team strong{color:var(--rec-text)!important}
-.live-recorder-v8 .live-scoreboard{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(170px,1.25fr) minmax(0,1fr)!important;align-items:center!important;padding:14px!important;gap:10px!important}
-.live-recorder-v8 .live-score-side{grid-row:1!important;grid-column:auto!important;display:flex!important;flex-direction:column!important;gap:5px!important;border:0!important;background:transparent!important;padding:6px!important;min-width:0!important}
-.live-recorder-v8 .live-score-side:nth-child(1){grid-column:1!important}.live-recorder-v8 .live-score-side:nth-child(2){grid-column:3!important}
-.live-recorder-v8 .live-score-team{display:flex!important;flex-direction:column!important;align-items:center!important;min-width:0;text-align:center}
-.live-recorder-v8 .live-score-team strong{font-size:clamp(11px,1.6vw,18px)!important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.live-recorder-v8 .live-score-value{font-size:clamp(32px,6vw,66px)!important;color:white!important;line-height:1!important}
-.live-recorder-v8 .live-score-center{grid-column:2!important;grid-row:1!important;display:flex!important;flex-wrap:wrap!important;justify-content:center!important;align-items:center!important;gap:8px!important;min-width:0!important}
-.live-recorder-v8 .live-score-center .live-quarter{order:1;flex-basis:100%;margin:auto;max-width:145px!important;border:1px solid #a3afc1!important;border-radius:30px!important;background:#0b101b!important;color:white!important;font-size:20px!important;justify-content:center!important}
-.live-recorder-v8 .live-quarter span{display:none!important}
-.live-recorder-v8 .live-clock-entry{order:2;flex-basis:100%;display:flex!important;align-items:center!important;justify-content:center!important;min-width:0!important}
-.live-recorder-v8 .live-clock-entry>span,.live-recorder-v8 .live-clock-entry small{display:none!important}
-.live-recorder-v8 .live-clock-input{width:100%!important;max-width:180px!important;text-align:center!important;background:transparent!important;color:white!important;border:0!important;font-variant-numeric:tabular-nums;font-size:clamp(23px,4vw,43px)!important;font-weight:800!important;padding:0!important;line-height:1.2!important}
-.live-recorder-v8 .live-score-center>.pill{order:0;flex-basis:100%;width:max-content;margin:auto}
-.live-recorder-v8 .live-score-center>.button{order:3;font-size:12px!important;min-height:36px!important}
-.live-recorder-v8 .live-quarter-scoreboard{grid-column:1/-1!important;grid-row:2!important;border-top:1px solid #293345!important;padding-top:7px!important;color:#cbd5e1!important}
-.live-recorder-v8 .live-quarter-scoreboard th,.live-recorder-v8 .live-quarter-scoreboard td{color:#dbe5f3!important;background:transparent!important;border-color:#293345!important}
-.live-recorder-v8 .live-lineups{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
-.live-recorder-v8 .live-lineup-card{min-width:0!important;padding:8px!important;background:transparent!important;border:0!important;display:flex!important;flex-direction:column!important;gap:8px!important}
-.live-recorder-v8 .live-lineup-head{min-width:0!important;display:flex!important;gap:6px!important;align-items:center!important}
-.live-recorder-v8 .live-lineup-head small{color:var(--rec-muted)!important}
-.live-recorder-v8 .live-roster-section{min-width:0!important}
-.live-recorder-v8 .live-roster-label{display:none!important}
-.live-recorder-v8 .live-player-list.live-oncourt-list{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:5px!important;min-width:0!important}
-.live-recorder-v8 .live-player-chip{width:100%!important;min-width:0!important;min-height:48px!important;padding:5px 2px!important;border:2px solid #168de3!important;border-radius:13px!important;background:#101d30!important;color:#fff!important;display:flex!important;justify-content:center!important;align-items:center!important;flex-direction:column!important;gap:2px!important}
-.live-recorder-v8 .live-lineup-card:nth-child(2) .live-player-chip{border-color:#f14b73!important;background:#2a1725!important}
-.live-recorder-v8 .live-player-chip.selected{background:#087ad8!important;border-color:#52d9ff!important;box-shadow:0 0 0 2px #083a5a!important}
-.live-recorder-v8 .live-lineup-card:nth-child(2) .live-player-chip.selected{background:#bb2452!important;border-color:#ff8baa!important}
-.live-recorder-v8 .live-jersey{color:#fff!important;font-weight:800!important;font-size:clamp(11px,1.5vw,18px)!important;white-space:nowrap}
-.live-recorder-v8 .live-player-name{color:#d5e1ef!important;font-size:10px!important;line-height:1.1!important;max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
-.live-recorder-v8 .live-substitute-button{width:100%!important;min-height:43px!important;border:1px solid #a3b3c9!important;border-radius:13px!important;background:#1c2635!important;color:white!important;justify-content:center!important;font-weight:700!important}
-.live-recorder-v8 .possession-card{background:#1a2536!important;color:#e4efff!important;border:1px solid #3c506b!important;border-radius:12px!important;padding:9px!important}
-.live-recorder-v8 .possession-card small{color:#b9c7d9!important}
-.live-recorder-v8 .live-recorder-box{background:transparent!important;border:0!important;padding:0!important}
-.live-recorder-v8 .live-actions{display:grid!important;gap:9px!important}
-.live-recorder-v8 .live-action-row{display:grid!important;gap:8px!important;grid-template-columns:repeat(5,minmax(0,1fr))!important}
-.live-recorder-v8 .live-action-row-3,.live-recorder-v8 .live-action-row-5{grid-template-columns:repeat(2,minmax(0,1fr))!important}
-.live-recorder-v8 .live-action-row-4{grid-template-columns:repeat(3,minmax(0,1fr))!important}
-.live-recorder-v8 .live-action{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-width:0!important;min-height:74px!important;padding:8px 3px!important;border:2px solid #299bff!important;border-radius:16px!important;background:linear-gradient(140deg,#19507c,#0d253f)!important;color:white!important;text-align:center!important}
-.live-recorder-v8 .live-action svg{width:22px!important;height:22px!important;flex-shrink:0}
-.live-recorder-v8 .live-action span{display:block!important;min-width:0!important}
-.live-recorder-v8 .live-action strong{color:white!important;font-size:clamp(10px,1.3vw,16px)!important;line-height:1.1!important;overflow-wrap:anywhere}
-.live-recorder-v8 .live-action small{display:none!important}
-.live-recorder-v8 .live-action-pass{background:linear-gradient(140deg,#079efb,#0564c2)!important;border-color:#64e1ff!important}
-.live-recorder-v8 .live-action-row-2 .live-action{background:linear-gradient(140deg,#4a236e,#24143d)!important;border-color:#b77af4!important}
-.live-recorder-v8 .live-action-row-3 .live-action{background:linear-gradient(140deg,#095e43,#073b31)!important;border-color:#45e8a0!important}
-.live-recorder-v8 .live-action-row-4 .live-action{background:linear-gradient(140deg,#674019,#36240d)!important;border-color:#ffbd38!important}
-.live-recorder-v8 .live-action-row-5 .live-action{background:linear-gradient(140deg,#364355,#1c2633)!important;border-color:#a9b6c8!important}
-.live-recorder-v8 .live-action:disabled{opacity:.46!important;cursor:not-allowed!important}
-.live-recorder-v8 .live-recorder-footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding:12px;margin-top:12px;border:1px solid #58667b;border-radius:13px;background:#222c3c;color:#f8fafc;font-size:13px}
-.live-recorder-v8 .pending-pass,.live-recorder-v8 .assist-confirm-inline{border-radius:12px!important}
-@media(max-width:720px){.live-recorder-v8{padding:6px!important;gap:8px!important}.live-recorder-v8 .panel{padding:10px!important}.live-recorder-v8 .live-scoreboard{padding:8px!important;grid-template-columns:minmax(0,1fr) minmax(120px,1.2fr) minmax(0,1fr)!important}.live-recorder-v8 .live-score-side{padding:2px!important}.live-recorder-v8 .live-score-side img{max-width:38px!important;max-height:38px!important}.live-recorder-v8 .live-score-center{gap:4px!important}.live-recorder-v8 .live-score-center>.button{padding:4px 7px!important;font-size:10px!important}.live-recorder-v8 .live-lineups{gap:3px!important}.live-recorder-v8 .live-lineup-card{padding:2px!important}.live-recorder-v8 .live-lineup-head{display:none!important}.live-recorder-v8 .live-player-list.live-oncourt-list{gap:3px!important}.live-recorder-v8 .live-player-chip{min-height:43px!important;border-radius:9px!important}.live-recorder-v8 .live-player-name{font-size:8px!important}.live-recorder-v8 .live-substitute-button{font-size:10px!important;padding:5px 2px!important;min-height:36px!important}.live-recorder-v8 .live-action-row{gap:4px!important}.live-recorder-v8 .live-action{min-height:62px!important;padding:5px 2px!important;border-radius:11px!important}.live-recorder-v8 .live-action svg{width:18px!important;height:18px!important}.live-recorder-v8 .live-action strong{font-size:10px!important}.live-recorder-v8 .live-recorder-footer{font-size:11px!important;padding:9px!important}}
 
 
-/* EO2MATE Sports — light responsive recorder override (Nov 8). */
-/* Scoped exclusively to the game recorder. Keep one shared global stylesheet. */
-.live-recorder-v8 {
-  --rec-bg:#f3f6fb;--rec-card:#ffffff;--rec-line:#d5deea;
-  --rec-text:#17243a;--rec-muted:#52647c;
-  box-sizing:border-box; width:100%; min-width:0; max-width:100%;
-  color:var(--rec-text)!important; background:var(--rec-bg)!important;
-  border-radius:16px!important; overflow:clip;
+/* EO2MATE SPORTS — recorder light responsive layout, consolidated.
+   Global stylesheet remains shared. No inline game handlers are changed. */
+.live-recorder-v8{
+  --rec-ink:#21354e;--rec-line:#d6e2ef;
+  display:grid!important;gap:12px!important;min-width:0!important;
+  width:100%!important;max-width:100%!important;padding:clamp(6px,1.2vw,14px)!important;
+  border-radius:16px;background:#f3f7fc!important;color:var(--rec-ink)!important;
   container-type:inline-size;
 }
-.live-recorder-v8 *, .live-recorder-v8 *::before,.live-recorder-v8 *::after {box-sizing:border-box}
-.live-recorder-v8 .panel,.live-recorder-v8 .live-scoreboard {
-  min-width:0!important; max-width:100%!important;
-  background:#fff!important; color:var(--rec-text)!important;
-  border:1px solid var(--rec-line)!important; border-radius:15px!important;
-  box-shadow:0 2px 9px #243b5310!important;
+.live-recorder-v8 *, .live-recorder-v8 *::before,.live-recorder-v8 *::after{box-sizing:border-box}
+.live-recorder-v8 .panel,.live-recorder-v8 .live-scoreboard{
+  min-width:0!important;max-width:100%!important;background:#fff!important;
+  color:var(--rec-ink)!important;border:1px solid var(--rec-line)!important;
+  border-radius:16px!important;box-shadow:0 3px 12px #1d42660c!important;
 }
-.live-recorder-v8 .panel h2,.live-recorder-v8 .panel h3,
-.live-recorder-v8 .panel-heading,.live-recorder-v8 .live-lineup-head strong,
-.live-recorder-v8 .live-score-team strong,.live-recorder-v8 .live-roster-label {
-  color:#17243a!important;
+.live-recorder-v8 .panel{padding:clamp(9px,1.5vw,16px)!important}
+.live-recorder-v8 .panel-heading{margin-bottom:9px!important}
+.live-recorder-v8 .panel h2,.live-recorder-v8 .panel h3,.live-recorder-v8 .panel-heading,
+.live-recorder-v8 .live-score-team strong,.live-recorder-v8 .live-lineup-head strong{color:var(--rec-ink)!important}
+.live-recorder-v8 .live-scoreboard{
+  display:grid!important;grid-template-columns:minmax(0,1fr) minmax(110px,1.25fr) minmax(0,1fr)!important;
+  gap:clamp(4px,1vw,12px)!important;padding:clamp(7px,1.5vw,14px)!important;align-items:center!important;
 }
-.live-recorder-v8 .live-scoreboard {grid-template-columns:minmax(0,1fr) minmax(110px,1.15fr) minmax(0,1fr)!important}
-.live-recorder-v8 .live-score-side {background:transparent!important;color:#17243a!important}
-.live-recorder-v8 .live-score-value {color:#17243a!important}
-.live-recorder-v8 .live-score-center .live-quarter {background:#edf4ff!important;color:#154b89!important;border-color:#9ebee4!important}
-.live-recorder-v8 .live-clock-input {background:#edf4ff!important;color:#18365c!important;text-shadow:none!important;box-shadow:none!important;border:1px solid #bad0e9!important;min-height:40px!important}
-.live-recorder-v8 .live-quarter-scoreboard {border-color:#dce4ef!important;color:#344761!important}
-.live-recorder-v8 .live-quarter-scoreboard th,.live-recorder-v8 .live-quarter-scoreboard td {color:#334155!important;background:transparent!important;border-color:#dce4ef!important}
-.live-recorder-v8 .live-lineups {width:100%;min-width:0!important;gap:clamp(3px,1vw,12px)!important}
-.live-recorder-v8 .live-lineup-card {min-width:0!important;padding:clamp(2px,.8vw,9px)!important}
-.live-recorder-v8 .live-lineup-card+.live-lineup-card {border-left:1px solid #cbd5e1!important;padding-left:clamp(3px,.8vw,10px)!important}
-.live-recorder-v8 .live-player-list.live-oncourt-list {min-width:0!important;gap:clamp(2px,.6vw,7px)!important}
-.live-recorder-v8 .live-player-chip {background:#edf6ff!important;border-color:#3188d2!important;color:#17385f!important;min-width:0!important;min-height:44px!important;overflow:hidden}
-.live-recorder-v8 .live-lineup-card:nth-child(2) .live-player-chip {background:#fff1f3!important;border-color:#e35870!important;color:#77283b!important}
-.live-recorder-v8 .live-player-chip.selected {background:#176ec2!important;border-color:#07549c!important;color:#fff!important;box-shadow:0 0 0 2px #c5e2ff!important}
-.live-recorder-v8 .live-lineup-card:nth-child(2) .live-player-chip.selected {background:#be3151!important;border-color:#9d1c3a!important;color:#fff!important}
-.live-recorder-v8 .live-jersey {color:inherit!important;font-size:clamp(10px,1.2vw,16px)!important}
-.live-recorder-v8 .live-player-name {color:inherit!important;opacity:.9;max-width:100%!important}
-.live-recorder-v8 .live-substitute-button {background:#f7f9fd!important;color:#253c58!important;border:1px solid #aebed2!important;min-width:0!important;white-space:normal}
-.live-recorder-v8 .possession-card {background:#eff5ff!important;color:#253c58!important;border-color:#c7d8ef!important}
-.live-recorder-v8 .possession-card small {color:#52647c!important}
-.live-recorder-v8 .live-action {color:#17243a!important;box-shadow:none!important;border-width:1.5px!important;min-width:0!important;touch-action:manipulation}
-.live-recorder-v8 .live-action strong {color:inherit!important;font-size:clamp(10px,1.3vw,15px)!important}
-.live-recorder-v8 .live-action-pass {background:#dceeff!important;border-color:#3486d0!important;color:#104d87!important}
-.live-recorder-v8 .live-action-row-1 .live-action:not(.live-action-pass) {background:#eaf4ff!important;border-color:#76a9d7!important;color:#205581!important}
-.live-recorder-v8 .live-action-row-2 .live-action {background:#f2eaff!important;border-color:#aa82d2!important;color:#64318d!important}
-.live-recorder-v8 .live-action-row-3 .live-action {background:#e1f8ec!important;border-color:#65bb91!important;color:#176e4a!important}
-.live-recorder-v8 .live-action-row-4 .live-action {background:#fff0d7!important;border-color:#d7a64a!important;color:#85550b!important}
-.live-recorder-v8 .live-action-row-5 .live-action {background:#edf1f6!important;border-color:#a2b2c5!important;color:#344861!important}
-.live-recorder-v8 .live-action:focus-visible,.live-recorder-v8 .live-player-chip:focus-visible {outline:3px solid #1875c9!important;outline-offset:2px}
-.live-recorder-v8 .live-recorder-footer {background:#edf2f8!important;color:#263b55!important;border-color:#cbd8e8!important}
-.live-recorder-v8 .pending-pass,.live-recorder-v8 .assist-confirm-inline {color:#17243a!important;background:#f2f7ff!important}
-.live-recorder-v8 .table-wrap {max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.live-recorder-v8 .live-action-row {min-width:0!important;gap:clamp(3px,.75vw,9px)!important}
-.live-recorder-v8 .live-action {min-height:clamp(54px,7vw,76px)!important;padding:6px 3px!important}
-.live-recorder-v8 .live-action svg {width:clamp(16px,2vw,23px)!important;height:clamp(16px,2vw,23px)!important}
-/* Container queries adapt to the recorder's actual available width (including sidebars). */
-@container (max-width:720px) {
- .live-recorder-v8 .live-scoreboard {padding:9px!important;gap:5px!important;grid-template-columns:minmax(0,1fr) minmax(110px,1.1fr) minmax(0,1fr)!important}
- .live-recorder-v8 .live-lineups {gap:3px!important}
- .live-recorder-v8 .live-lineup-card {padding:2px!important}
- .live-recorder-v8 .live-lineup-head {display:none!important}
- .live-recorder-v8 .live-player-chip {padding:3px 1px!important;min-height:42px!important;border-radius:8px!important}
- .live-recorder-v8 .live-player-name {font-size:8px!important}
- .live-recorder-v8 .live-action {min-height:60px!important;padding:5px 2px!important}
- .live-recorder-v8 .live-action strong {font-size:clamp(9px,1.8vw,12px)!important}
- .live-recorder-v8 .live-substitute-button {font-size:clamp(9px,1.8vw,12px)!important;min-height:40px!important;padding:4px 2px!important}
+.live-recorder-v8 .live-score-side{grid-row:1!important;grid-column:auto!important;
+  min-width:0!important;display:flex!important;align-items:center!important;
+  justify-content:center!important;flex-direction:column!important;gap:5px!important;
+  padding:3px!important;border:0!important;background:transparent!important}
+.live-recorder-v8 .live-score-side:nth-child(1){grid-column:1!important}
+.live-recorder-v8 .live-score-side:nth-child(2){grid-column:3!important}
+.live-recorder-v8 .live-score-team{display:grid!important;justify-items:center!important;min-width:0!important;text-align:center!important}
+.live-recorder-v8 .live-score-team strong{font-size:clamp(10px,1.4vw,16px)!important;
+  overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap}
+.live-recorder-v8 .live-score-value{font-size:clamp(27px,5vw,58px)!important;line-height:1!important;color:#1c3656!important}
+.live-recorder-v8 .live-score-center{grid-column:2!important;grid-row:1!important;
+  min-width:0!important;display:flex!important;align-items:center!important;
+  justify-content:center!important;gap:5px!important;flex-wrap:wrap!important}
+.live-recorder-v8 .live-score-center .live-quarter{order:1;flex:0 0 auto!important;
+  padding:5px 10px!important;border-radius:22px!important;background:#eaf3ff!important;
+  color:#1c5a99!important;border:1px solid #a7c8ec!important;font-size:13px!important}
+.live-recorder-v8 .live-quarter span{display:none!important}
+.live-recorder-v8 .live-clock-entry{order:2;flex-basis:100%!important;
+  width:100%!important;display:grid!important;justify-items:center!important;gap:2px!important}
+.live-recorder-v8 .live-clock-entry>span,.live-recorder-v8 .live-clock-entry>small{display:none!important}
+.live-recorder-v8 .live-clock-input{width:100%!important;min-width:0!important;
+  min-height:39px!important;max-width:190px!important;padding:4px!important;
+  background:#eaf3ff!important;color:#1a3b62!important;text-shadow:none!important;
+  border:1px solid #b6cce8!important;border-radius:9px!important;
+  font-size:clamp(17px,2.9vw,31px)!important;letter-spacing:0!important;box-shadow:none!important}
+.live-recorder-v8 .live-score-center>.button{order:3;min-height:30px!important;padding:5px 8px!important;font-size:11px!important}
+.live-recorder-v8 .live-quarter-scoreboard{grid-column:1/-1!important;grid-row:2!important;
+  min-width:0!important;border-top:1px solid var(--rec-line)!important;padding-top:8px!important}
+.live-recorder-v8 .table-wrap{max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+.live-recorder-v8 .live-quarter-scoreboard table{min-width:440px!important}
+.live-recorder-v8 .live-lineups{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  align-items:start!important;gap:clamp(3px,1vw,12px)!important;min-width:0!important}
+.live-recorder-v8 .live-lineup-card{display:flex!important;flex-direction:column!important;
+  min-width:0!important;gap:8px!important;padding:clamp(2px,.8vw,10px)!important;
+  border:0!important;background:transparent!important}
+.live-recorder-v8 .live-lineup-card+.live-lineup-card{border-left:1px solid #cbd5e1!important;padding-left:clamp(4px,1vw,12px)!important}
+.live-recorder-v8 .live-lineup-head{min-width:0!important}
+.live-recorder-v8 .live-roster-label{font-size:10px!important;color:#61758b!important}
+.live-recorder-v8 .live-player-list.live-oncourt-list{display:grid!important;
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:clamp(2px,.55vw,7px)!important;min-width:0!important}
+.live-recorder-v8 .live-player-chip{display:flex!important;flex-direction:column!important;
+  align-items:center!important;justify-content:center!important;min-width:0!important;
+  min-height:46px!important;padding:4px 1px!important;border:2px solid #328cdb!important;
+  background:#e8f3ff!important;color:#174f83!important;border-radius:10px!important;overflow:hidden!important}
+.live-recorder-v8 .live-lineup-card:nth-child(2) .live-player-chip{border-color:#e45b78!important;background:#fff0f3!important;color:#8e2d47!important}
+.live-recorder-v8 .live-player-chip.selected{background:#1975c7!important;color:#fff!important;border-color:#0b5da9!important}
+.live-recorder-v8 .live-lineup-card:nth-child(2) .live-player-chip.selected{background:#c53c5a!important;color:#fff!important;border-color:#a62948!important}
+.live-recorder-v8 .live-jersey{font-size:clamp(10px,1.3vw,16px)!important;color:inherit!important;white-space:nowrap}
+.live-recorder-v8 .live-player-name{font-size:10px!important;max-width:100%;color:inherit!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live-recorder-v8 .live-substitute-button{width:100%!important;min-width:0!important;
+  min-height:43px!important;padding:7px 3px!important;white-space:normal!important;
+  background:#f4f8fd!important;color:#254565!important;border:1px solid #a8bdd5!important;
+  font-size:clamp(10px,1.1vw,14px)!important;line-height:1.2!important}
+.live-recorder-v8 .possession-card{margin:0 0 8px!important;padding:9px 11px!important;
+  background:#edf5ff!important;border:1px solid #c5dbf4!important;color:#244363!important}
+.live-recorder-v8 .possession-card small{color:#526d89!important}
+.live-recorder-v8 .live-recorder-box{min-width:0!important;padding:0!important;
+  background:transparent!important;border:0!important;gap:9px!important}
+.live-recorder-v8 .live-actions{display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+  width:100%!important;gap:8px!important;align-items:stretch!important;min-width:0!important}
+.live-recorder-v8 .live-action-row{display:grid!important;width:100%!important;min-width:0!important;
+  gap:clamp(3px,.7vw,9px)!important;align-items:stretch!important;justify-content:stretch!important}
+.live-recorder-v8 .live-action-row-1,.live-recorder-v8 .live-action-row-2{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+.live-recorder-v8 .live-action-row-3,.live-recorder-v8 .live-action-row-5{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.live-recorder-v8 .live-action-row-4{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.live-recorder-v8 .live-action{display:flex!important;flex-direction:column!important;
+  justify-content:center!important;align-items:center!important;flex:initial!important;
+  width:100%!important;max-width:none!important;min-width:0!important;
+  min-height:clamp(54px,5.8vw,76px)!important;padding:7px 2px!important;gap:5px!important;
+  border:1.5px solid!important;border-radius:11px!important;text-align:center!important;
+  box-shadow:none!important;touch-action:manipulation}
+.live-recorder-v8 .live-action>span{display:block!important;flex:initial!important;
+  width:100%!important;min-width:0!important}
+.live-recorder-v8 .live-action strong{display:block!important;min-width:0!important;
+  font-size:clamp(10px,1.05vw,15px)!important;line-height:1.15!important;
+  overflow-wrap:normal!important;word-break:normal!important;white-space:normal!important;color:inherit!important}
+.live-recorder-v8 .live-action small{display:none!important}
+.live-recorder-v8 .live-action svg{width:clamp(17px,2vw,25px)!important;height:clamp(17px,2vw,25px)!important}
+.live-recorder-v8 .live-action-row-1 .live-action{background:#e7f3ff!important;border-color:#6faee3!important;color:#195b95!important}
+.live-recorder-v8 .live-action-row-1 .live-action:first-child{background:#cde9ff!important;border-color:#2589d9!important}
+.live-recorder-v8 .live-action-row-2 .live-action{background:#f2eaff!important;border-color:#b18cda!important;color:#6d3b97!important}
+.live-recorder-v8 .live-action-row-3 .live-action{background:#e0f7e9!important;border-color:#64bc8c!important;color:#176d46!important}
+.live-recorder-v8 .live-action-row-4 .live-action{background:#fff0d5!important;border-color:#dba43f!important;color:#81510e!important}
+.live-recorder-v8 .live-action-row-5 .live-action{background:#eaf0f7!important;border-color:#a8b8ca!important;color:#314b67!important}
+.live-recorder-v8 .live-action:disabled{opacity:.48!important;cursor:not-allowed!important}
+.live-recorder-v8 .live-recorder-footer{display:flex!important;flex-wrap:wrap!important;
+  justify-content:space-between!important;gap:7px!important;margin-top:10px!important;
+  padding:10px!important;border:1px solid #c5d6e9!important;border-radius:11px!important;
+  background:#edf4fc!important;color:#244263!important;font-size:12px!important}
+.live-recorder-v8 .pending-pass,.live-recorder-v8 .assist-confirm-inline{background:#f0f6ff!important;color:#21354e!important}
+.live-recorder-v8 .live-action:focus-visible,.live-recorder-v8 .live-player-chip:focus-visible{outline:3px solid #247fd2!important;outline-offset:2px}
+@container (max-width:680px){
+  .live-recorder-v8 .live-lineup-head,.live-recorder-v8 .live-roster-label{display:none!important}
+  .live-recorder-v8 .live-player-name{display:none!important}
+  .live-recorder-v8 .live-score-team strong{font-size:10px!important}
+  .live-recorder-v8 .live-action{min-height:56px!important;padding:6px 1px!important}
+  .live-recorder-v8 .live-action strong{font-size:clamp(10px,2.2cqw,12px)!important}
+  .live-recorder-v8 .live-action svg{width:18px!important;height:18px!important}
+  .live-recorder-v8 .live-substitute-button{font-size:10px!important;min-height:41px!important}
 }
-@container (max-width:470px) {
- .live-recorder-v8 .live-scoreboard {grid-template-columns:minmax(0,1fr) minmax(92px,1.15fr) minmax(0,1fr)!important;padding:6px!important}
- .live-recorder-v8 .live-score-team strong {font-size:10px!important}
- .live-recorder-v8 .live-score-value {font-size:clamp(24px,8vw,36px)!important}
- .live-recorder-v8 .live-score-center>.button {font-size:9px!important;min-height:30px!important;padding:4px!important}
- .live-recorder-v8 .live-score-center .live-quarter {font-size:13px!important;padding:4px!important}
- .live-recorder-v8 .live-clock-input {font-size:clamp(17px,5vw,25px)!important;min-height:34px!important}
- .live-recorder-v8 .live-score-side img {max-width:30px!important;max-height:30px!important}
- .live-recorder-v8 .live-player-name {display:none!important}
- .live-recorder-v8 .live-jersey {font-size:clamp(9px,2.6vw,12px)!important}
- .live-recorder-v8 .live-player-chip {min-height:42px!important}
- .live-recorder-v8 .live-action-row {gap:3px!important}
- .live-recorder-v8 .live-action {min-height:55px!important;border-radius:8px!important;gap:2px!important}
- .live-recorder-v8 .live-action svg {width:16px!important;height:16px!important}
- .live-recorder-v8 .live-action strong {font-size:9px!important;line-height:1.15!important}
- .live-recorder-v8 .live-recorder-footer {font-size:11px!important}
- .live-recorder-v8 .live-substitute-button {font-size:9px!important;min-height:40px!important}
+@container (max-width:410px){
+  .live-recorder-v8 .live-scoreboard{grid-template-columns:minmax(0,1fr) minmax(104px,1.2fr) minmax(0,1fr)!important}
+  .live-recorder-v8 .live-score-center>.button{font-size:10px!important;padding:4px!important}
+  .live-recorder-v8 .live-score-side img{max-width:30px!important;max-height:30px!important}
+  .live-recorder-v8 .live-action-row{gap:3px!important}
+  .live-recorder-v8 .live-action strong{font-size:10px!important}
+  .live-recorder-v8 .live-player-chip{min-height:40px!important;border-radius:8px!important}
+  .live-recorder-v8 .live-jersey{font-size:10px!important}
 }
-@media (max-width:720px) {
- .live-recorder-v8 {width:100%!important;max-width:100%!important;min-width:0!important;padding:5px!important}
- .live-recorder-v8 .panel {padding:8px!important}
- .live-recorder-v8 .live-scoreboard {max-width:100%!important}
+@media(max-width:820px){
+  /* Recorder uses the full mobile viewport instead of a persistent 72px sidebar. */
+  body:has(.live-recorder-v8) .sidebar{display:none!important}
+  body:has(.live-recorder-v8) .workspace,
+  body:has(.live-recorder-v8) .sidebar-collapsed .workspace{margin-left:0!important;width:100%!important}
+  body:has(.live-recorder-v8) .page-content{padding:8px!important;max-width:100%!important}
+  body:has(.live-recorder-v8) .topbar{padding:0 12px!important}
+  body:has(.live-recorder-v8) .live-recorder-v8{scroll-margin-top:70px}
+}
+@media(max-width:580px){
+  .live-recorder-v8 .panel{padding:9px!important}
+  .live-recorder-v8 .live-quarter-scoreboard table{min-width:430px!important}
 }
