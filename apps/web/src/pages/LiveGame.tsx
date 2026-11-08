@@ -28,6 +28,13 @@ export function LiveGame() {
   const roster=useWorkspaceRows<RosterPlayer>('rosters','id,season_id,team_id,player_id,jersey_number,position,status,is_default_starter,created_at,players(first_name,last_name)');
   const gameLineups=useWorkspaceRows<GameLineupRow>('game_lineups','id,game_id,team_id,player_id,created_at');
   const events=useWorkspaceRows<DbEvent>('game_events','id,game_id,team_id,player_id,related_player_id,event_type,period,clock_ms,points,created_at,reversed_event_id,client_action_id');
+  // Cross-device synchronization: Postgres changes notify all open recorders.
+  // Polling is a fallback when realtime replication is not enabled for these tables.
+  // Keep all listeners scoped to the currently selected game.
+  const syncReloadRef = useRef<() => void>(() => {});
+  syncReloadRef.current = () => {
+    void Promise.all([games.reload(true), events.reload(true), gameLineups.reload(true)]);
+  };
   const [gameId,setGameId]=useState('');
   const [selectedTeamId,setSelectedTeamId]=useState('');const [selectedPlayerId,setSelectedPlayerId]=useState('');
   const [period,setPeriod]=useState(1);
@@ -46,6 +53,40 @@ export function LiveGame() {
   const [queuedEvents,setQueuedEvents]=useState<QueuedGameEvent[]>([]);const [online,setOnline]=useState(()=>navigator.onLine);const [syncAttempt,setSyncAttempt]=useState(0);const syncRunning=useRef(false);
   const playableGames=games.rows.filter(row=>row.status!=='DRAFT');
   useEffect(()=>{if(requestedGameId&&playableGames.some(row=>row.id===requestedGameId)){setGameId(requestedGameId);return;}if(!gameId){const preferred=playableGames.find(row=>row.status==='LIVE')??playableGames.find(row=>row.status==='SCHEDULED')??playableGames[0];if(preferred)setGameId(preferred.id);}},[requestedGameId,gameId,playableGames]);
+  useEffect(() => {
+    if (!gameId) return;
+    let alive = true;
+    let inFlight = false;
+    const refresh = async () => {
+      if (!alive || inFlight || !navigator.onLine) return;
+      inFlight = true;
+      try { await Promise.all([games.reload(true), events.reload(true), gameLineups.reload(true)]); }
+      finally { inFlight = false; }
+    };
+    // Realtime accelerates updates; periodic refresh also handles missed notifications
+    // and Supabase projects where realtime publication has not been enabled.
+    const channel = supabase.channel(`live-game-sync-${gameId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, () => syncReloadRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games', filter: `id=eq.${gameId}` }, () => syncReloadRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_lineups', filter: `game_id=eq.${gameId}` }, () => syncReloadRef.current())
+      .subscribe();
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 5000);
+    const onFocus = () => { void refresh(); };
+    const onVisibility = () => { if (!document.hidden) void refresh(); };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    void refresh();
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      void supabase.removeChannel(channel);
+    };
+  // The reload methods are stable callbacks from useWorkspaceRows.
+  }, [gameId, games.reload, events.reload, gameLineups.reload]);
   const [clockNow,setClockNow]=useState(()=>Date.now());
   useEffect(()=>{const timer=window.setInterval(()=>setClockNow(Date.now()),15000);return()=>window.clearInterval(timer);},[]);
   const game=playableGames.find(row=>row.id===gameId);
