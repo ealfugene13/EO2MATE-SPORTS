@@ -13,7 +13,10 @@ import { supabase } from '../lib/supabase';
 import { getWorkspace } from '../lib/workspaceData';
 import { listQueuedGameEvents, queueGameEvent, removeQueuedGameEvent, setQueuedGameEventError, type QueuedGameEvent } from '../lib/offlineGameEvents';
 import { PageTitle, Button, Metric, Panel } from './shared';
-import { League, Competition, Teams, Setup } from './League';
+import { League } from './League';
+import { Competition } from './Competition';
+import { Teams } from './Teams';
+import { Setup } from './Setup';
 
 export function LeagueWorkflow() {
   type OrgState={id:string;name:string;workflow_status:'SETUP'|'SUBMITTED'|'APPROVED'|'LOCKED';setup_submitted_at:string|null;setup_approved_at:string|null;league_locked_at:string|null;setup_review_note:string|null};

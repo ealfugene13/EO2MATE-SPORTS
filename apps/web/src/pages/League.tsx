@@ -13,7 +13,8 @@ import { supabase } from '../lib/supabase';
 import { getWorkspace } from '../lib/workspaceData';
 import { listQueuedGameEvents, queueGameEvent, removeQueuedGameEvent, setQueuedGameEventError, type QueuedGameEvent } from '../lib/offlineGameEvents';
 import { PageTitle, Button, Pill, Metric, Panel } from './shared';
-import { Dashboard, Competition } from './Dashboard';
+import { Dashboard } from './Dashboard';
+import { Competition } from './Competition';
 
 export function League() {
   type LeagueRow = { id: string; organization_id: string; name: string; created_at: string };

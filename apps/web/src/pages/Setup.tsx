@@ -13,7 +13,13 @@ import { supabase } from '../lib/supabase';
 import { getWorkspace } from '../lib/workspaceData';
 import { listQueuedGameEvents, queueGameEvent, removeQueuedGameEvent, setQueuedGameEventError, type QueuedGameEvent } from '../lib/offlineGameEvents';
 import { PageTitle } from './shared';
-import { League, Competition, Registrations, Announcements, Access, LeagueWorkflow, GenericPage } from './League';
+import { League } from './League';
+import { Competition } from './Competition';
+import { Registrations } from './Registrations';
+import { Announcements } from './Announcements';
+import { Access } from './Access';
+import { LeagueWorkflow } from './LeagueWorkflow';
+import { GenericPage } from './GenericPage';
 
 export function Setup() {
   const [tab,setTab]=useState(()=>new URLSearchParams(window.location.search).get('tab')==='league'?'League & rules':'Organization');const tabs=['Organization','League & rules','Workflow','Registrations','Staff & access','Announcements','Settings'];

@@ -13,7 +13,12 @@ import { supabase } from '../lib/supabase';
 import { getWorkspace } from '../lib/workspaceData';
 import { listQueuedGameEvents, queueGameEvent, removeQueuedGameEvent, setQueuedGameEventError, type QueuedGameEvent } from '../lib/offlineGameEvents';
 import { getBasketballRuleDefaults, Row, normalizeBasketballRules, sameBasketballRules, manilaDateKey, assessSchedule, scheduleTeamCount, buildGameSchedule, NumberRuleKey, BooleanRuleKey, ruleBounds, PageTitle, Button, Pill, Metric, Panel, TeamPageLink, OpenGameLink, GamesCalendar } from './shared';
-import { Dashboard, League, Teams, Players, Games, Standings } from './Dashboard';
+import { Dashboard } from './Dashboard';
+import { League } from './League';
+import { Teams } from './Teams';
+import { Players } from './Players';
+import { Games } from './Games';
+import { Standings } from './Standings';
 
 export function Competition() {
   const [searchParams,setSearchParams] = useSearchParams();
