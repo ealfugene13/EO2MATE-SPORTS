@@ -1,0 +1,23 @@
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import {
+  AlertTriangle, Activity, ArrowDownToLine, ArrowRight, Award, CalendarDays, Check, CheckCircle2,
+  ChevronDown, CircleHelp, Clock3, Download, Ellipsis, Filter, Flag, Plus, Radio,
+  RefreshCw, Search, ShieldCheck, Sparkles, Trophy, Undo2, Users, UserRound, Wifi, WifiOff, Lock,
+  ArrowLeftRight, ImagePlus, Pause, Play, Upload, X,
+} from 'lucide-react';
+import type { BasketballRules } from '../lib/basketballRules';
+import { DataState, useWorkspaceRows } from '../lib/workspaceData';
+import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
+import { getWorkspace } from '../lib/workspaceData';
+import { listQueuedGameEvents, queueGameEvent, removeQueuedGameEvent, setQueuedGameEventError, type QueuedGameEvent } from '../lib/offlineGameEvents';
+import { PageTitle, Button, Panel } from './shared';
+
+export function GenericPage({ name }: { name: string }) {
+  const [orgId,setOrgId]=useState('');const [orgName,setOrgName]=useState('');const [timezone,setTimezone]=useState('Asia/Manila');const [privacyContact,setPrivacyContact]=useState('');const [publicPortal,setPublicPortal]=useState(false);const [canCreate,setCanCreate]=useState(false);const [busy,setBusy]=useState(true);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [saved,setSaved]=useState(false);
+  const load=async()=>{setBusy(true);setError('');setCanCreate(false);try{const workspace=await getWorkspace();const {data,error:queryError}=await supabase.from('organizations').select('id,name,timezone,privacy_contact,public_portal_enabled').eq('id',workspace.id).single();if(queryError)throw queryError;setOrgId(data.id);setOrgName(data.name);setTimezone(data.timezone||'Asia/Manila');setPrivacyContact(data.privacy_contact||'');setPublicPortal(Boolean(data.public_portal_enabled));}catch(e){const message=e instanceof Error?e.message:'Unable to load organization settings.';setError(message);setCanCreate(message.includes('not assigned to an active sports organization'));}finally{setBusy(false);}};
+  useEffect(()=>{void load();},[]);
+  async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();setSaving(true);setError('');setSaved(false);try{if(!orgId){const slug=orgName.trim().toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+crypto.randomUUID().slice(0,8);const {data,error:rpcError}=await supabase.rpc('create_organization',{p_name:orgName.trim(),p_slug:slug});if(rpcError)throw rpcError;setOrgId(data.id);}else{const {error:updateError}=await supabase.from('organizations').update({name:orgName.trim(),timezone,privacy_contact:privacyContact.trim()||null,public_portal_enabled:publicPortal}).eq('id',orgId);if(updateError)throw updateError;}setSaved(true);if(!orgId)await load();}catch(e){setError(e instanceof Error?e.message:'Unable to save organization settings.');}finally{setSaving(false);}}
+  return <><PageTitle eyebrow="WORKSPACE" title={name} subtitle="Manage organization details and public portal visibility."/><DataState loading={busy} error={error&&!canCreate?error:''} onRetry={()=>void load()}/>{error&&canCreate&&<div className="callout">No organization is assigned to this account yet. Create one to start your league workspace.</div>}{saved&&<div className="success-banner"><CheckCircle2 size={17}/>{orgId?'Organization settings saved.':'Organization created.'}</div>}{!busy&&<form onSubmit={save}><Panel title={orgId?'Organization profile':'Create your organization'}><div className="field-grid"><label>Organization name<input value={orgName} onChange={e=>setOrgName(e.target.value)} required maxLength={120}/></label>{orgId&&<><label>Timezone<select value={timezone} onChange={e=>setTimezone(e.target.value)}><option>Asia/Manila</option><option>UTC</option><option>Asia/Singapore</option><option>America/Los_Angeles</option></select></label><label>Privacy contact<input type="email" value={privacyContact} onChange={e=>setPrivacyContact(e.target.value)} placeholder="privacy@yourleague.ph"/></label><label>Public portal<select value={String(publicPortal)} onChange={e=>setPublicPortal(e.target.value==='true')}><option value="false">Private until approved</option><option value="true">Public</option></select></label></>}</div><div className="form-footer"><span className="muted">Sports data remains separate from EO2MATE selling data.</span><Button type="submit" variant="primary" disabled={saving}>{saving?'Saving…':orgId?'Save changes':'Create organization'}</Button></div>{error&&!canCreate&&<div className="form-error" role="alert">{error}</div>}</Panel></form>}</>;
+}
