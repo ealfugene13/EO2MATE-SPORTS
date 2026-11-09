@@ -26,9 +26,9 @@ Deno.serve(async request => {
     if (gameError) return json(request, { error: gameError.message }, 400);
     if (!game) return json(request, { error: 'GAME_NOT_FOUND' }, 404);
     const { data: membership, error: membershipError } = await admin.from('organization_members')
-      .select('role,active').eq('organization_id', game.organization_id).eq('user_id', auth.user.id).maybeSingle();
+      .select('role,user_role,active').eq('organization_id', game.organization_id).eq('user_id', auth.user.id).maybeSingle();
     if (membershipError) return json(request, { error: membershipError.message }, 400);
-    if (!membership?.active || !['OWNER', 'ADMIN', 'SCORER', 'STATISTICIAN', 'COACH'].includes(membership.role)) return json(request, { error: 'FORBIDDEN' }, 403);
+    if (!membership?.active || !['OWNER', 'ADMIN', 'STAFF', 'SCORER', 'STATISTICIAN', 'COACH'].includes(membership.user_role || membership.role)) return json(request, { error: 'FORBIDDEN' }, 403);
     if (game.status !== 'SCHEDULED' && game.status !== 'LIVE') return json(request, { error: 'GAME_NOT_AWAITING_STARTING_LINEUPS' }, 409);
     if (game.status === 'SCHEDULED' && !game.scheduled_at) return json(request, { error: 'GAME_SCHEDULE_REQUIRED' }, 409);
     const early = game.status === 'SCHEDULED' && !!game.scheduled_at && new Date(game.scheduled_at).getTime() > Date.now();
@@ -38,9 +38,10 @@ Deno.serve(async request => {
       if (!values.keyword?.trim()) return json(request, { error: 'EARLY_START_KEYWORD_REQUIRED' }, 403);
       if (values.keyword.trim() !== expected) return json(request, { error: 'INVALID_EARLY_START_KEYWORD' }, 403);
     }
-    const { data, error } = await admin.rpc('start_game_with_lineups', {
+    const { data, error } = await admin.rpc('start_game_with_lineups_authorized', {
       p_actor: auth.user.id, p_game_id: game.id, p_home_player_ids: values.home_player_ids,
       p_away_player_ids: values.away_player_ids, p_home_coach_confirmed: true, p_away_coach_confirmed: true,
+      p_early_start_authorized: early,
     });
     if (error) return json(request, { error: error.message }, 400);
     return json(request, data);
