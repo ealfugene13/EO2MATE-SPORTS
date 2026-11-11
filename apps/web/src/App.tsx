@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import Shell from './components/Shell';
 import { SupportAdmin } from './pages/SupportAdmin';
 import { configured, supabase } from './lib/supabase';
+import { getWorkspace } from './lib/workspaceData';
+import ViewerPortal from './pages/ViewerPortal';
 import {
   Access, Announcements, Competition, Dashboard, GameReview, Games, GenericPage, League,
   LeagueWorkflow, LiveGame, Players, PublicLive, Registrations, Reports, Setup, Standings, Teams,
@@ -20,9 +22,11 @@ export default function App() {
   },[]);
   return <Routes>
     <Route path="/login" element={<Login />} />
-    <Route path="/support" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <SupportAdmin />) : <div className="empty-state">Checking sign-in…</div>} />
+    <Route path="/viewer" element={<ViewerPortal />} />
+    <Route path="/viewer/:slug" element={<ViewerPortal />} />
+    <Route path="/support" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <SupportRoute />) : <div className="empty-state">Checking sign-in…</div>} />
     <Route path="/public/live" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <main className="workspace public-workspace"><div className="page-content"><PublicLive /></div></main>) : <div className="empty-state">Checking sign-in…</div>} />
-    <Route path="/" element={sessionReady ? (configured&&!signedIn?<Navigate to="/login" replace/>:<Shell />) : <div className="empty-state">Checking sign-in…</div>}>
+    <Route path="/" element={sessionReady ? (configured&&!signedIn?<Navigate to="/login" replace/>:<WorkspaceRoute />) : <div className="empty-state">Checking sign-in…</div>}>
       <Route index element={<Dashboard />} />
       <Route path="league" element={<League />} />
       <Route path="setup" element={<Setup />} />
@@ -43,4 +47,36 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>
   </Routes>;
+}
+
+function WorkspaceRoute() {
+  const [decision, setDecision] = useState<'checking'|'workspace'|'viewer'>('checking');
+  const [organizationId, setOrganizationId] = useState('');
+  useEffect(() => {
+    let active = true;
+    void getWorkspace().then(workspace => {
+      if (!active) return;
+      setOrganizationId(workspace.id);
+      setDecision(workspace.role.toUpperCase() === 'VIEWER' ? 'viewer' : 'workspace');
+    }).catch(() => { if (active) setDecision('workspace'); });
+    return () => { active = false; };
+  }, []);
+  if (decision === 'checking') return <div className="empty-state">Checking organization access…</div>;
+  if (decision === 'viewer') return <Navigate to={`/viewer?organization_id=${encodeURIComponent(organizationId)}`} replace />;
+  return <Shell />;
+}
+
+function SupportRoute() {
+  const [viewerOrg, setViewerOrg] = useState('');
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void getWorkspace().then(workspace => {
+      if (active && workspace.role.toUpperCase() === 'VIEWER') setViewerOrg(workspace.id);
+    }).catch(() => {}).finally(() => { if (active) setChecking(false); });
+    return () => { active = false; };
+  }, []);
+  if (checking) return <div className="empty-state">Checking access…</div>;
+  if (viewerOrg) return <Navigate to={`/viewer?organization_id=${encodeURIComponent(viewerOrg)}`} replace />;
+  return <SupportAdmin />;
 }

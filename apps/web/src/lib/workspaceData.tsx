@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, configured } from './supabase';
 
-export type Workspace = { id: string; name: string; user_grp: string; role: 'OWNER' | 'ADMIN' | 'STAFF' };
+export type Workspace = { id: string; name: string; user_grp: string; role: 'OWNER' | 'ADMIN' | 'STAFF' | 'VIEWER' | string };
 type Row = Record<string, unknown>;
 
 export async function getWorkspace(): Promise<Workspace> {
