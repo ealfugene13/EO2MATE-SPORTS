@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, LockKeyhole, ShieldCheck, Trophy } from 'lucide-react';
 import { supabase, configured } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -23,7 +24,9 @@ export default function Login() {
       const verified = await supabase.auth.mfa.challengeAndVerify({ factorId: verifiedTotp.id, code });
       if (verified.error) { await supabase.auth.signOut(); setBusy(false); setError(verified.error.message); return; }
     }
-    setBusy(false); navigate('/');
+    let destination='/';
+    try{const access=await api<{is_support_admin:boolean}>('/api/support-admin',{method:'POST',body:JSON.stringify({action:'detect'})});if(access.is_support_admin)destination='/support';}catch{}
+    setBusy(false); navigate(destination);
   }
   async function resetPassword() {
     setError(''); setResetNotice('');

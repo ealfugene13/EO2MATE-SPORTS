@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Login from './pages/Login';
 import Shell from './components/Shell';
+import { SupportAdmin } from './pages/SupportAdmin';
 import { configured, supabase } from './lib/supabase';
 import {
   Access, Announcements, Competition, Dashboard, GameReview, Games, GenericPage, League,
@@ -19,6 +20,7 @@ export default function App() {
   },[]);
   return <Routes>
     <Route path="/login" element={<Login />} />
+    <Route path="/support" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <SupportAdmin />) : <div className="empty-state">Checking sign-in…</div>} />
     <Route path="/public/live" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <main className="workspace public-workspace"><div className="page-content"><PublicLive /></div></main>) : <div className="empty-state">Checking sign-in…</div>} />
     <Route path="/" element={sessionReady ? (configured&&!signedIn?<Navigate to="/login" replace/>:<Shell />) : <div className="empty-state">Checking sign-in…</div>}>
       <Route index element={<Dashboard />} />

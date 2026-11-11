@@ -4,6 +4,9 @@ verify_jwt = false
 [functions.organization-member-invite]
 verify_jwt = false
 
+[functions.support-admin]
+verify_jwt = false
+
 [functions.game-start]
 verify_jwt = false
 

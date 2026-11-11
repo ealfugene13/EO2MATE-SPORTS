@@ -9,7 +9,7 @@ function functionTarget(path:string, init:RequestInit){
     [/^\/api\/game-events\/([^/]+)\/reverse$/,'game-event-reverse',match=>({event_id:decodeURIComponent(match[1])})],
   ];
   for(const [pattern,name,extra] of routes){const match=path.match(pattern);if(match)return{name,init:{...init,body:JSON.stringify({...body,...extra(match)})}};}
-  const simple:Record<string,string>={'/api/me':'me','/api/organization-members/invite':'organization-member-invite','/api/game-events':'game-event','/api/game-substitutions':'game-substitution'};
+  const simple:Record<string,string>={'/api/me':'me','/api/organization-members/invite':'organization-member-invite','/api/game-events':'game-event','/api/game-substitutions':'game-substitution','/api/support-admin':'support-admin'};
   const name=simple[path];if(!name)throw new Error(`Unknown Sports API route: ${path}`);return{name,init};
 }
 
