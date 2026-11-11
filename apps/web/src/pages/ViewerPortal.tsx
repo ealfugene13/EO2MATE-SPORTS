@@ -13,20 +13,24 @@ type TeamStat = { team: string; played: number; wins: number; losses: number; po
 type PlayerStat = { name: string; team: string; points: number; rebounds: number; assists: number; steals: number; blocks: number };
 type PublicEvent = { game: string; at: string; period: number; clock_ms: number; team: string; player?: string; event: string; points: number };
 type PortalData = { organizations?: Organization[]; organization?: Organization | null; leagues?: League[]; competitions?: Competition[]; teams?: Team[]; players?: Player[]; games?: Game[]; team_stats?: TeamStat[]; player_stats?: PlayerStat[]; events?: PublicEvent[] };
-type Tab = 'Organization' | 'League' | 'Competition' | 'Team' | 'Player' | 'Games' | 'Stats' | 'Play-by-play';
+export type Tab = 'Organization' | 'League' | 'Competition' | 'Team' | 'Player' | 'Games' | 'Stats' | 'Play-by-play';
 
-export default function ViewerPortal() {
+const tabPaths:Record<Tab,string>={Organization:'organization',League:'league',Competition:'competition',Team:'teams',Player:'players',Games:'games',Stats:'stats','Play-by-play':'play-by-play'};
+
+export default function ViewerPortal({section='Organization',embedded=false}:{section?:Tab;embedded?:boolean}) {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const memberOrganizationId = params.get('organization_id');
+  const selectedSlug = slug ?? params.get('organization');
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<Tab>('Organization');
+  const [tab, setTab] = useState<Tab>(section);
+  useEffect(()=>setTab(section),[section]);
   useEffect(() => {
     let active = true;
     setLoading(true); setError('');
-    void Promise.resolve(supabase.rpc('get_sports_viewer_portal', { p_slug: slug ?? null, p_organization_id: memberOrganizationId }))
+    void Promise.resolve(supabase.rpc('get_sports_viewer_portal', { p_slug: selectedSlug ?? null, p_organization_id: memberOrganizationId }))
       .then(({ data: result, error: rpcError }) => {
         if (!active) return;
         if (rpcError) throw rpcError;
@@ -34,23 +38,25 @@ export default function ViewerPortal() {
       }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : 'Viewer information is unavailable.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [slug, memberOrganizationId]);
+  }, [selectedSlug, memberOrganizationId]);
   const organization = data?.organization;
   const competitions = data?.competitions ?? [];
   const leagueNames = useMemo(() => Object.fromEntries((data?.leagues ?? []).map(row => [row.id, row.name])), [data?.leagues]);
   const competitionNames = useMemo(() => Object.fromEntries(competitions.map(row => [row.id, row.name])), [competitions]);
 
-  return <main className="viewer-portal">
-    <header className="viewer-header"><Link to="/viewer" className="viewer-brand"><span className="viewer-brand-mark">◌</span><span><b>EO2MATE SPORTS</b><small>PUBLIC VIEWER</small></span></Link><span className="viewer-readonly"><ShieldCheck size={15}/> Public · Read only</span></header>
+  const directoryPath=`/public/${tabPaths[tab]}`;
+  const viewerHref=(orgSlug:string)=>`${directoryPath}?organization=${encodeURIComponent(orgSlug)}`;
+  return <main className={`viewer-portal ${embedded?'viewer-embedded':''}`}>
+    {!embedded&&<header className="viewer-header"><Link to="/" className="viewer-brand"><span className="viewer-brand-mark">◌</span><span><b>EO2MATE SPORTS</b><small>PUBLIC VIEWER</small></span></Link><span className="viewer-readonly"><ShieldCheck size={15}/> Public · Read only</span></header>}
     {loading && <div className="viewer-state">Loading public sports information…</div>}
-    {!loading && error && <section className="viewer-state viewer-error"><h2>Unable to load this viewer page</h2><p>{error}</p><Link to="/viewer">Browse organizations</Link></section>}
+    {!loading && error && <section className="viewer-state viewer-error"><h2>Unable to load this viewer page</h2><p>{error}</p><Link to="/">Browse organizations</Link></section>}
     {!loading && !error && !organization && <>
       <section className="viewer-hero"><span className="viewer-eyebrow">EO2MATE SPORTS</span><h1>Organizations</h1><p>View organization, league, competition, team, player, and game information.</p></section>
-      <section className="viewer-org-grid">{(data?.organizations ?? []).map(org => <Link className="viewer-org-card" key={org.id} to={`/viewer/${encodeURIComponent(org.slug)}`}><span className="viewer-org-icon"><Trophy size={20}/></span><span><small>{org.sport ?? 'SPORTS ORGANIZATION'}</small><b>{org.name}</b><em>Open public pages <ChevronRight size={14}/></em></span></Link>)}{!data?.organizations?.length && <div className="viewer-state">No organizations found.</div>}</section>
+      <section className="viewer-org-grid">{(data?.organizations ?? []).map(org => <Link className="viewer-org-card" key={org.id} to={viewerHref(org.slug)}><span className="viewer-org-icon"><Trophy size={20}/></span><span><small>{org.sport ?? 'SPORTS ORGANIZATION'}</small><b>{org.name}</b><em>Open {tab.toLowerCase()} pages <ChevronRight size={14}/></em></span></Link>)}{!data?.organizations?.length && <div className="viewer-state">No organizations found.</div>}</section>
     </>}
     {!loading && !error && organization && <>
       <section className="viewer-hero viewer-org-hero"><div><span className="viewer-eyebrow">{organization.sport ?? 'SPORTS ORGANIZATION'}</span><h1>{organization.name}</h1><p>Organization information and read-only league records.</p></div><div className="viewer-hero-badge"><Building2 size={26}/><span>Public<br/>information</span></div></section>
-      <nav className="viewer-tabs" aria-label="Public pages">{(['Organization','League','Competition','Team','Player','Games','Stats','Play-by-play'] as Tab[]).map(item=><button key={item} className={tab===item?'selected':''} onClick={()=>setTab(item)}>{item==='Organization'?<Building2 size={15}/>:item==='League'?<Trophy size={15}/>:item==='Competition'?<CalendarDays size={15}/>:item==='Team'?<Users size={15}/>:item==='Player'?<UserRound size={15}/>:item==='Games'?<CalendarDays size={15}/>:<Activity size={15}/>}<span>{item}</span></button>)}</nav>
+      {!embedded&&<nav className="viewer-tabs" aria-label="Public pages">{(['Organization','League','Competition','Team','Player','Games','Stats','Play-by-play'] as Tab[]).map(item=><button key={item} className={tab===item?'selected':''} onClick={()=>setTab(item)}>{item==='Organization'?<Building2 size={15}/>:item==='League'?<Trophy size={15}/>:item==='Competition'?<CalendarDays size={15}/>:item==='Team'?<Users size={15}/>:item==='Player'?<UserRound size={15}/>:item==='Games'?<CalendarDays size={15}/>:<Activity size={15}/>}<span>{item}</span></button>)}</nav>}
       {tab==='Organization'&&<section className="viewer-panel"><div className="viewer-panel-title"><span><Building2 size={17}/></span><div><h2>Organization</h2><p>Public organization profile</p></div></div><div className="viewer-profile-grid"><div><small>ORGANIZATION</small><b>{organization.name}</b></div><div><small>SPORT</small><b>{organization.sport??'Sports'}</b></div><div><small>TIME ZONE</small><b>{organization.timezone??'—'}</b></div></div></section>}
       {tab==='League'&&<Directory title="Leagues" subtitle="League records" rows={(data?.leagues??[]).map(row=>[row.name,row.season||'—',row.status||''])} headers={['League','Season','Status']}/>}
       {tab==='Competition'&&<Directory title="Competitions" subtitle="Competition records" rows={competitions.map(row=>[row.name,leagueNames[row.league_id??'']||'—',row.format?.replaceAll('_',' ')||'—',row.status||''])} headers={['Competition','League','Format','Status']}/>}
@@ -61,7 +67,7 @@ export default function ViewerPortal() {
       {tab==='Play-by-play'&&<section className="viewer-panel"><div className="viewer-panel-title"><span><Activity size={17}/></span><div><h2>Recent play-by-play</h2><p>Read-only game events</p></div></div>{(data?.events??[]).map((event,i)=><article className="viewer-event-row" key={`${event.game}-${event.at}-${i}`}><time>Q{event.period} · {formatClock(event.clock_ms)}</time><span><b>{event.player??event.team}</b> {event.event.replaceAll('_',' ').toLowerCase()}</span><small>{event.game}</small>{event.points>0&&<strong>+{event.points}</strong>}</article>)}{!data?.events?.length&&<p className="viewer-empty">No public play-by-play available.</p>}</section>}
       <div className="viewer-privacy"><ShieldCheck size={15}/> Read-only pages; no editing, setup, in-game controls, or admin actions.</div>
     </>}
-    <footer className="viewer-footer"><span>EO2MATE SPORTS</span><span>Public viewer · Read only</span></footer>
+    {!embedded&&<footer className="viewer-footer"><span>EO2MATE SPORTS</span><span>Public viewer · Read only</span></footer>}
   </main>;
 }
 
