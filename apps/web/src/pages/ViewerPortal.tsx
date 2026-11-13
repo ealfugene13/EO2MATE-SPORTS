@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Activity, CalendarDays, ChevronRight, MapPin, ShieldCheck, Trophy, Users, UserRound, Building2 } from 'lucide-react';
+import { Activity, CalendarDays, ChevronRight, MapPin, Trophy, Users, UserRound, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type Organization = { id: string; name: string; slug: string; sport?: string; timezone?: string };
@@ -47,7 +47,7 @@ export default function ViewerPortal({section='Organization',embedded=false}:{se
   const directoryPath=`/public/${tabPaths[tab]}`;
   const viewerHref=(orgSlug:string)=>`${directoryPath}?organization=${encodeURIComponent(orgSlug)}`;
   return <main className={`viewer-portal ${embedded?'viewer-embedded':''}`}>
-    {!embedded&&<header className="viewer-header"><Link to="/" className="viewer-brand"><span className="viewer-brand-mark">◌</span><span><b>EO2MATE SPORTS</b><small>PUBLIC VIEWER</small></span></Link><span className="viewer-readonly"><ShieldCheck size={15}/> Public · Read only</span></header>}
+    {!embedded&&<header className="viewer-header"><Link to="/" className="viewer-brand"><span className="viewer-brand-mark">◌</span><span><b>EO2MATE SPORTS</b></span></Link></header>}
     {loading && <div className="viewer-state">Loading public sports information…</div>}
     {!loading && error && <section className="viewer-state viewer-error"><h2>Unable to load this viewer page</h2><p>{error}</p><Link to="/">Browse organizations</Link></section>}
     {!loading && !error && !organization && <>
@@ -65,9 +65,8 @@ export default function ViewerPortal({section='Organization',embedded=false}:{se
       {tab==='Games'&&<section className="viewer-panel"><div className="viewer-panel-title"><span><CalendarDays size={17}/></span><div><h2>Games</h2><p>Schedule and scores</p></div></div><div className="viewer-game-list">{(data?.games??[]).map(game=><article className="viewer-game-card" key={game.id}><div className="viewer-game-meta"><span>{competitionNames[game.competition_id??'']??'Competition'}</span><span className={`viewer-status ${game.status?.toLowerCase()??''}`}>{game.status??'Scheduled'}</span></div><div className="viewer-game-score"><b>{game.home_team??'Home'}</b><strong>{game.home_score??'—'} <i>:</i> {game.away_score??'—'}</strong><b>{game.away_team??'Away'}</b></div><div className="viewer-game-foot"><span><CalendarDays size={13}/>{game.scheduled_at?new Date(game.scheduled_at).toLocaleString():'Time TBD'}</span>{game.venue&&<span><MapPin size={13}/>{game.venue}</span>}{game.status==='LIVE'&&<span className="viewer-live">Period {game.period??1} · {formatClock(game.clock_ms??0)}</span>}</div></article>)}{!data?.games?.length&&<p className="viewer-empty">No games available.</p>}</div></section>}
       {tab==='Stats'&&<div className="viewer-stats-grid"><section className="viewer-panel"><div className="viewer-panel-title"><span><Trophy size={17}/></span><div><h2>Team standings</h2><p>Based on completed games</p></div></div><div className="viewer-table-scroll"><table className="viewer-table"><thead><tr><th>Team</th><th>GP</th><th>W</th><th>L</th><th>PF</th><th>PA</th></tr></thead><tbody>{(data?.team_stats??[]).map((row,i)=><tr key={`${row.team}-${i}`}><td>{row.team}</td><td>{row.played}</td><td>{row.wins}</td><td>{row.losses}</td><td>{row.points_for}</td><td>{row.points_against}</td></tr>)}</tbody></table></div>{!data?.team_stats?.length&&<p className="viewer-empty">No completed game stats available.</p>}</section><section className="viewer-panel"><div className="viewer-panel-title"><span><Activity size={17}/></span><div><h2>Player leaders</h2><p>Basic sports roster details only</p></div></div><div className="viewer-table-scroll"><table className="viewer-table"><thead><tr><th>Player</th><th>Team</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>{(data?.player_stats??[]).map((row,i)=><tr key={`${row.name}-${i}`}><td>{row.name}</td><td>{row.team}</td><td>{row.points}</td><td>{row.rebounds}</td><td>{row.assists}</td></tr>)}</tbody></table></div>{!data?.player_stats?.length&&<p className="viewer-empty">No player stats are available yet.</p>}</section></div>}
       {tab==='Play-by-play'&&<section className="viewer-panel"><div className="viewer-panel-title"><span><Activity size={17}/></span><div><h2>Recent play-by-play</h2><p>Read-only game events</p></div></div>{(data?.events??[]).map((event,i)=><article className="viewer-event-row" key={`${event.game}-${event.at}-${i}`}><time>Q{event.period} · {formatClock(event.clock_ms)}</time><span><b>{event.player??event.team}</b> {event.event.replaceAll('_',' ').toLowerCase()}</span><small>{event.game}</small>{event.points>0&&<strong>+{event.points}</strong>}</article>)}{!data?.events?.length&&<p className="viewer-empty">No public play-by-play available.</p>}</section>}
-      {!embedded&&<div className="viewer-privacy"><ShieldCheck size={15}/> No editing, setup, in-game controls, or admin actions.</div>}
     </>}
-    {!embedded&&<footer className="viewer-footer"><span>EO2MATE SPORTS</span><span>Public viewer · Read only</span></footer>}
+    {!embedded&&<footer className="viewer-footer"><span>EO2MATE SPORTS</span></footer>}
   </main>;
 }
 

@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom';
-import { Activity, CalendarDays, LogIn, Menu, ShieldCheck, Trophy, UserRound, Users, Building2 } from 'lucide-react';
+import { Activity, CalendarDays, LogIn, Menu, Trophy, UserRound, Users, Building2 } from 'lucide-react';
 
 const publicNavigation = [
   { to: '/public/organization', label: 'Organization', icon: Building2 },
@@ -25,10 +25,8 @@ export default function PublicShell() {
   return <div className="app-shell public-app-shell">
     <aside className="sidebar">
       <div className="brand-row"><div className="brand-symbol"><span className="basketball-seam">◌</span></div><div className="brand-name"><b>EO2MATE</b><span>SPORTS</span></div><span className="collapse-button"><Menu size={17}/></span></div>
-      <div className="org-switch public-org-switch"><span className="org-mark">EO</span><span className="org-copy"><small>SPORTS DIRECTORY</small><b>EO2MATE SPORTS</b><em>Organization information</em></span><ShieldCheck size={15}/></div>
-      <div className="sidebar-search"><ShieldCheck size={15}/><span>Public information</span></div>
+      <div className="org-switch public-org-switch"><span className="org-mark">EO</span><span className="org-copy"><small>SPORTS DIRECTORY</small><b>EO2MATE SPORTS</b><em>Organization information</em></span></div>
       <nav className="side-nav" aria-label="Public pages"><div className="nav-group">{publicNavigation.map(item=><NavLink to={`${item.to}${suffix}`} key={item.to} className={({isActive})=>`nav-link ${isActive?'active':''}`}><item.icon size={17}/><span>{item.label}</span></NavLink>)}</div></nav>
-      <div className="sidebar-bottom"><div className="help-card"><span><ShieldCheck size={17}/></span><b>Viewer access</b><small>Browse public league information. Editing, setup, live controls, and admin tools are restricted.</small></div></div>
     </aside>
     <main className="workspace">
       <header className="topbar public-topbar"><div className="breadcrumbs"><span>EO2MATE SPORTS</span><i>/</i><b>{current?.label??'Organizations'}</b></div><div className="topbar-actions"><Link className="button primary public-login-button" to="/login"><LogIn size={15}/> Login</Link></div></header>
