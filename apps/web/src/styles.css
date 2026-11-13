@@ -193,3 +193,5 @@
 .public-topbar .topbar-actions{display:flex;align-items:center;gap:12px}
 .public-login-button{display:inline-flex;align-items:center;gap:7px}
 @media(max-width:760px){.public-topbar{padding:0 12px}.public-access-label{display:none}.public-login-button{padding:8px 10px}}
+
+.viewer-filter-notice{width:min(1120px,calc(100% - 40px));margin:16px auto 0;color:#748190;font-size:10px}.viewer-filter-notice button{margin-left:8px;padding:4px 8px;border:1px solid #e4eaf0;border-radius:6px;background:#fff;color:#e16c3a;font-size:9px;font-weight:700;cursor:pointer}.viewer-competition-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:14px}.viewer-competition-summary .viewer-panel{box-shadow:none}@media(max-width:760px){.viewer-competition-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:440px){.viewer-competition-summary{grid-template-columns:1fr 1fr;gap:7px}.viewer-competition-summary .viewer-panel{padding:10px!important}.viewer-competition-summary strong{font-size:16px!important}}
