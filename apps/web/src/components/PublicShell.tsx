@@ -18,14 +18,21 @@ export default function PublicShell() {
   const carried = new URLSearchParams();
   const organization = searchParams.get('organization');
   const organizationId = searchParams.get('organization_id');
+  const leagueId = searchParams.get('league_id');
+  const competitionId = searchParams.get('competition_id');
   if (organization) carried.set('organization', organization);
   if (organizationId) carried.set('organization_id', organizationId);
+  if (leagueId) carried.set('league_id', leagueId);
+  if (competitionId) carried.set('competition_id', competitionId);
   const suffix = carried.toString() ? `?${carried.toString()}` : '';
+  const organizationHome = organization
+    ? `/public/organization?organization=${encodeURIComponent(organization)}`
+    : organizationId ? `/public/organization?organization_id=${encodeURIComponent(organizationId)}` : '/public/organization';
   const current = publicNavigation.find(item => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`));
   return <div className="app-shell public-app-shell">
     <aside className="sidebar">
       <div className="brand-row"><div className="brand-symbol"><span className="basketball-seam">◌</span></div><div className="brand-name"><b>EO2MATE</b><span>SPORTS</span></div><span className="collapse-button"><Menu size={17}/></span></div>
-      <div className="org-switch public-org-switch"><span className="org-mark">EO</span><span className="org-copy"><small>SPORTS DIRECTORY</small><b>EO2MATE SPORTS</b><em>Organization information</em></span></div>
+      <Link className="org-switch public-org-switch" to={organizationHome}><span className="org-mark">EO</span><span className="org-copy"><small>SPORTS DIRECTORY</small><b>EO2MATE SPORTS</b><em>Organization information</em></span></Link>
       <nav className="side-nav" aria-label="Public pages"><div className="nav-group">{publicNavigation.map(item=><NavLink to={`${item.to}${suffix}`} key={item.to} className={({isActive})=>`nav-link ${isActive?'active':''}`}><item.icon size={17}/><span>{item.label}</span></NavLink>)}</div></nav>
     </aside>
     <main className="workspace">
