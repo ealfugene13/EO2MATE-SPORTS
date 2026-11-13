@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import Login from './pages/Login';
 import Shell from './components/Shell';
 import PublicShell from './components/PublicShell';
@@ -34,7 +34,7 @@ export default function App() {
       <Route path="players" element={<ViewerPortal section="Player" embedded/>}/>
       <Route path="games" element={<ViewerPortal section="Games" embedded/>}/>
       <Route path="stats" element={<ViewerPortal section="Stats" embedded/>}/>
-      <Route path="play-by-play" element={<ViewerPortal section="Play-by-play" embedded/>}/>
+      <Route path="play-by-play" element={<PublicGamesRedirect/>}/>
     </Route>
     <Route path="/support" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <SupportRoute />) : <div className="empty-state">Checking sign-in…</div>} />
     <Route path="/public/live" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <main className="workspace public-workspace"><div className="page-content"><PublicLive /></div></main>) : <div className="empty-state">Checking sign-in…</div>} />
@@ -70,6 +70,12 @@ function LegacyViewerRedirect(){
   const { pathname } = useLocation();
   const slug = decodeURIComponent(pathname.split('/').filter(Boolean).pop()??'');
   return <Navigate to={`/public/organization?organization=${encodeURIComponent(slug)}`} replace/>;
+}
+
+function PublicGamesRedirect(){
+  const [params]=useSearchParams();
+  const query=params.toString();
+  return <Navigate to={`/public/games${query?`?${query}`:''}`} replace/>;
 }
 
 function WorkspaceRoute() {

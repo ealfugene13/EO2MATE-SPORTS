@@ -9,7 +9,6 @@ const publicNavigation = [
   { to: '/public/players', label: 'Player', icon: UserRound },
   { to: '/public/games', label: 'Games', icon: CalendarDays },
   { to: '/public/stats', label: 'Stats', icon: Activity },
-  { to: '/public/play-by-play', label: 'Play-by-play', icon: Activity },
 ];
 
 export default function PublicShell() {
@@ -20,10 +19,12 @@ export default function PublicShell() {
   const organizationId = searchParams.get('organization_id');
   const leagueId = searchParams.get('league_id');
   const competitionId = searchParams.get('competition_id');
+  const gameId = searchParams.get('game_id');
   if (organization) carried.set('organization', organization);
   if (organizationId) carried.set('organization_id', organizationId);
   if (leagueId) carried.set('league_id', leagueId);
   if (competitionId) carried.set('competition_id', competitionId);
+  if (gameId) carried.set('game_id', gameId);
   const suffix = carried.toString() ? `?${carried.toString()}` : '';
   const organizationHome = organization
     ? `/public/organization?organization=${encodeURIComponent(organization)}`

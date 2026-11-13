@@ -102,6 +102,7 @@ begin
         'id',g.id,'competition_id',g.competition_id,'scheduled_at',g.scheduled_at,
         'status',g.status::text,'period',g.current_period,'clock_ms',g.clock_ms,
         'home_score',g.home_score,'away_score',g.away_score,
+        'home_team_id',g.home_team_id,'away_team_id',g.away_team_id,
         'home_team',ht.name,'away_team',at.name,'venue',to_jsonb(v)->>'name'
       ) order by g.scheduled_at nulls last)
       from public.games g
@@ -109,6 +110,21 @@ begin
       join public.teams at on at.id=g.away_team_id
       left join public.venues v on v.id=g.venue_id
       where g.organization_id=v_org.id
+    ),'[]'::jsonb),
+    'fixtures',coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',cm.id,'competition_id',cm.competition_id,'round_no',cm.round_no,
+        'slot_no',cm.slot_no,'home_team_id',cm.home_team_id,'away_team_id',cm.away_team_id,
+        'game_id',cm.game_id,'status',cm.status,
+        'home_team',ht.name,'away_team',at.name,
+        'game_status',g.status::text,'home_score',g.home_score,'away_score',g.away_score,
+        'scheduled_at',g.scheduled_at
+      ) order by cm.round_no,cm.slot_no)
+      from public.competition_matches cm
+      left join public.teams ht on ht.id=cm.home_team_id
+      left join public.teams at on at.id=cm.away_team_id
+      left join public.games g on g.id=cm.game_id
+      join public.competitions c on c.id=cm.competition_id and c.organization_id=v_org.id
     ),'[]'::jsonb),
     'team_stats',coalesce((
       with finished as (
