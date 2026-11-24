@@ -15,3 +15,5 @@ export { Reports } from './Reports';
 export { LeagueWorkflow } from './LeagueWorkflow';
 export { Setup } from './Setup';
 export { GenericPage } from './GenericPage';
+export { Ads } from './Ads';
+export { MedicalSupport } from './MedicalSupport';

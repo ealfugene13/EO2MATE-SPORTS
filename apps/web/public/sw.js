@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eo2mate-sports-shell-v1';
+const CACHE_NAME = 'eo2mate-sports-shell-v2';
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(['/', '/index.html'])));

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Activity, CalendarDays, ChevronRight, MapPin, Trophy, Users, UserRound, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import SponsorAds from '../components/SponsorAds';
 
 type Organization = { id: string; name: string; slug: string; sport?: string; timezone?: string };
 type League = { id: string; name: string; status?: string; season?: string };
@@ -72,6 +73,7 @@ export default function ViewerPortal({section='Organization',embedded=false}:{se
     </>}
     {!loading && !error && organization && <>
       <section className="viewer-hero viewer-org-hero"><div><span className="viewer-eyebrow">{organization.sport ?? 'SPORTS ORGANIZATION'}</span><h1>{organization.name}</h1><p>Organization profile and league records.</p></div>{!embedded&&<div className="viewer-hero-badge"><Building2 size={26}/><span>Public<br/>information</span></div>}</section>
+      <SponsorAds organizationId={organization.id}/>
       {!embedded&&<nav className="viewer-tabs" aria-label="Public pages">{(['Organization','League','Competition','Team','Player','Games','Stats'] as Tab[]).map(item=><button key={item} className={tab===item?'selected':''} onClick={()=>setTab(item)}>{item==='Organization'?<Building2 size={15}/>:item==='League'?<Trophy size={15}/>:item==='Competition'?<CalendarDays size={15}/>:item==='Team'?<Users size={15}/>:item==='Player'?<UserRound size={15}/>:item==='Games'?<CalendarDays size={15}/>:<Activity size={15}/>}<span>{item}</span></button>)}</nav>}
       {tab==='Organization'&&<OrganizationDashboard organization={organization} leagues={data?.leagues??[]} competitions={competitions} teams={data?.teams??[]} games={data?.games??[]} fixtures={data?.fixtures??[]} onOpenCompetition={id=>{const next=new URLSearchParams(params);next.set('competition_id',id);navigateWithViewerParams('/public/competition',next);}} onOpenTab={path=>navigateWithViewerParams(path,new URLSearchParams(params))}/>}
       {tab==='League'&&<Directory title="Leagues" subtitle="Select a league to view its competitions." rows={(data?.leagues??[]).map(row=>[row.name,row.season||'—',row.status||''])} headers={['League','Season','Status']} onFirstCellClick={index=>{const row=data?.leagues?.[index];if(!row)return;const next=new URLSearchParams(params);next.set('league_id',row.id);next.delete('competition_id');navigateWithViewerParams('/public/competition',next);}}/>}

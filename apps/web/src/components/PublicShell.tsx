@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom';
-import { Activity, CalendarDays, LogIn, Menu, Trophy, UserRound, Users, Building2 } from 'lucide-react';
+import { Activity, CalendarDays, LogIn, Menu, Trophy, UserRound, Users, Building2, HeartPulse } from 'lucide-react';
 
 const publicNavigation = [
   { to: '/public/organization', label: 'Organization', icon: Building2 },
@@ -9,6 +9,7 @@ const publicNavigation = [
   { to: '/public/players', label: 'Player', icon: UserRound },
   { to: '/public/games', label: 'Games', icon: CalendarDays },
   { to: '/public/stats', label: 'Stats', icon: Activity },
+  { to: '/public/medical', label: 'Medical support', icon: HeartPulse },
 ];
 
 export default function PublicShell() {

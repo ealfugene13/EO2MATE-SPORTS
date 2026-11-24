@@ -10,6 +10,7 @@ import ViewerPortal, { type Tab } from './pages/ViewerPortal';
 import {
   Access, Announcements, Competition, Dashboard, GameReview, Games, GenericPage, League,
   LeagueWorkflow, LiveGame, Players, PublicLive, Registrations, Reports, Setup, Standings, Teams,
+  Ads, MedicalSupport,
 } from './pages/Pages';
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
       <Route path="players" element={<ViewerPortal section="Player" embedded/>}/>
       <Route path="games" element={<ViewerPortal section="Games" embedded/>}/>
       <Route path="stats" element={<ViewerPortal section="Stats" embedded/>}/>
+      <Route path="medical" element={<MedicalSupport publicMode/>}/>
       <Route path="play-by-play" element={<PublicGamesRedirect/>}/>
     </Route>
     <Route path="/support" element={sessionReady ? (configured&&!signedIn ? <Navigate to="/login" replace/> : <SupportRoute />) : <div className="empty-state">Checking sign-in…</div>} />
@@ -56,6 +58,8 @@ export default function App() {
       <Route path="announcements" element={signedIn?<Announcements/>:<Navigate to="/login" replace/>} />
       <Route path="access" element={signedIn?<Access/>:<Navigate to="/login" replace/>} />
       <Route path="reports" element={signedIn?<Reports/>:<Navigate to="/login" replace/>} />
+      <Route path="ads" element={signedIn?<Ads/>:<Navigate to="/login" replace/>} />
+      <Route path="medical" element={<MedicalSupport/>} />
       <Route path="settings" element={signedIn?<GenericPage name="Workspace settings"/>:<Navigate to="/login" replace/>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>
