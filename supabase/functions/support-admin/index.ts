@@ -19,6 +19,20 @@ const planSchema = z.object({
 const requestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('detect') }),
   z.object({ action: z.literal('list') }),
+  z.object({ action: z.literal('list_ads') }),
+  z.object({
+    action: z.literal('save_ad'),
+    organization_id: z.string().uuid(),
+    sponsor_name: z.string().trim().min(1).max(120),
+    headline: z.string().trim().max(140).default(''),
+    image_url: z.string().url().refine(value => value.startsWith('https://')),
+    alt_text: z.string().trim().min(1).max(180),
+    target_url: z.string().url().refine(value => value.startsWith('https://')),
+    starts_at: z.string().datetime().nullable(),
+    ends_at: z.string().datetime().nullable(),
+  }),
+  z.object({ action: z.literal('set_ad_active'), ad_id: z.string().uuid(), active: z.boolean() }),
+  z.object({ action: z.literal('delete_ad'), ad_id: z.string().uuid() }),
   z.object({ action: z.literal('save_plan'), plan: planSchema }),
   z.object({
     action: z.literal('create_account'),
@@ -94,6 +108,43 @@ Deno.serve(async request => {
     const planById = new Map((plans ?? []).map(row => [row.id, row]));
     const subByOrg = new Map((subscriptions ?? []).map(row => [row.organization_id, { ...row, plan: planById.get(row.plan_id) ?? null }]));
     return json(request, { accounts: (accounts ?? []).map(row => ({ ...row, organization: orgById.get(row.organization_id) ?? null, subscription: subByOrg.get(row.organization_id) ?? null })), plans: plans ?? [] });
+  }
+
+  if (input.action === 'list_ads') {
+    const [{ data: organizations, error: organizationsError }, { data: ads, error: adsError }] = await Promise.all([
+      admin.from('organizations').select('id,name').order('name'),
+      admin.from('sponsor_ads').select('id,organization_id,sponsor_name,headline,image_url,alt_text,target_url,starts_at,ends_at,active,created_at').order('created_at', { ascending: false }),
+    ]);
+    if (organizationsError || adsError) return json(request, { error: organizationsError?.message ?? adsError?.message ?? 'ADS_LOAD_FAILED' }, 500);
+    return json(request, { organizations: organizations ?? [], ads: ads ?? [] });
+  }
+
+  if (input.action === 'save_ad') {
+    if (input.starts_at && input.ends_at && new Date(input.ends_at) < new Date(input.starts_at)) return json(request, { error: 'INVALID_AD_DATE_RANGE' }, 422);
+    const { data, error } = await admin.from('sponsor_ads').insert({
+      organization_id: input.organization_id, sponsor_name: input.sponsor_name, headline: input.headline,
+      image_url: input.image_url, alt_text: input.alt_text, target_url: input.target_url,
+      starts_at: input.starts_at, ends_at: input.ends_at, active: true, updated_by: auth.user.id,
+    }).select('*').single();
+    if (error) return json(request, { error: error.message }, 400);
+    await admin.from('platform_support_audit').insert({ actor_id: auth.user.id, organization_id: input.organization_id, action: 'CREATE_SPONSOR_AD', entity_id: data.id, metadata: { sponsor_name: data.sponsor_name, active: data.active } });
+    return json(request, data, 201);
+  }
+
+  if (input.action === 'set_ad_active') {
+    const { data, error } = await admin.from('sponsor_ads').update({ active: input.active, updated_by: auth.user.id, updated_at: new Date().toISOString() }).eq('id', input.ad_id).select('*').maybeSingle();
+    if (error) return json(request, { error: error.message }, 400);
+    if (!data) return json(request, { error: 'SPONSOR_AD_NOT_FOUND' }, 404);
+    await admin.from('platform_support_audit').insert({ actor_id: auth.user.id, organization_id: data.organization_id, action: input.active ? 'ACTIVATE_SPONSOR_AD' : 'PAUSE_SPONSOR_AD', entity_id: data.id, metadata: { sponsor_name: data.sponsor_name } });
+    return json(request, data);
+  }
+
+  if (input.action === 'delete_ad') {
+    const { data, error } = await admin.from('sponsor_ads').delete().eq('id', input.ad_id).select('id,organization_id,sponsor_name').maybeSingle();
+    if (error) return json(request, { error: error.message }, 400);
+    if (!data) return json(request, { error: 'SPONSOR_AD_NOT_FOUND' }, 404);
+    await admin.from('platform_support_audit').insert({ actor_id: auth.user.id, organization_id: data.organization_id, action: 'DELETE_SPONSOR_AD', entity_id: data.id, metadata: { sponsor_name: data.sponsor_name } });
+    return json(request, { deleted: true });
   }
 
   if (input.action === 'save_plan') {

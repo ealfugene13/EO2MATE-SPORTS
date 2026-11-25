@@ -206,3 +206,5 @@
 @media(max-width:700px){.medical-guide-grid{grid-template-columns:1fr}.sponsor-admin-card{align-items:flex-start;flex-wrap:wrap}.sponsor-admin-actions{width:100%}.live-medical-alert{align-items:stretch;flex-direction:column}.live-medical-alert>.button{justify-content:center}.medical-incident{flex-wrap:wrap}.medical-incident-actions{width:100%;margin-left:46px}.medical-emergency-dialog{max-height:90vh;overflow-y:auto}}
 
 .league-create-modal{width:min(900px,calc(100% - 24px));max-height:92vh;overflow-y:auto}.league-create-fields{display:grid;gap:12px}.league-create-fields .panel{margin:0}.league-create-fields .panel-heading{margin-bottom:12px}.league-create-fields .field-grid{margin:0}
+.support-heading-actions{display:flex;align-items:center;gap:9px}
+@media(max-width:620px){.support-heading-actions{width:100%;flex-wrap:wrap}}
