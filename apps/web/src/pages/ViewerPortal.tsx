@@ -59,9 +59,14 @@ export default function ViewerPortal({section='Organization',embedded=false}:{se
   useEffect(()=>{
     let active=true;setGroupBracketData(null);
     if(!selectedCompetitionId||selectedCompetition?.format!=='GROUP_BRACKET')return()=>{active=false;};
-    void supabase.rpc('get_public_group_bracket',{p_competition_id:selectedCompetitionId}).then(({data:result,error:rpcError})=>{
-      if(!active)return;if(rpcError)throw rpcError;setGroupBracketData((result??null) as GroupBracketData|null);
-    }).catch(()=>{if(active)setGroupBracketData(null);});
+    void (async()=>{
+      try{
+        const {data:result,error:rpcError}=await supabase.rpc('get_public_group_bracket',{p_competition_id:selectedCompetitionId});
+        if(!active)return;
+        if(rpcError)throw rpcError;
+        setGroupBracketData((result??null) as GroupBracketData|null);
+      }catch{if(active)setGroupBracketData(null);}
+    })();
     return()=>{active=false;};
   },[selectedCompetitionId,selectedCompetition?.format]);
   const visibleCompetitions = selectedLeagueId ? competitions.filter(row => row.league_id === selectedLeagueId) : competitions;
