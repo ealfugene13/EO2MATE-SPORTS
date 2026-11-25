@@ -68,9 +68,15 @@ export function manilaDateKey(value:Date|string):string{
 
 export function todayManilaDateKey():string{return manilaDateKey(new Date());}
 
-export function requiredGames(teamCount:number,format:string):number{return format==='ROUND_ROBIN_DOUBLE'?teamCount*(teamCount-1):format==='SINGLE_ELIMINATION'?teamCount-1:teamCount*(teamCount-1)/2;}
+export function requiredGames(teamCount:number,format:string,groupCount=2,qualifiersPerGroup=2,groupSizes?:number[]):number{
+  if(format==='GROUP_BRACKET'){
+    const sizes=groupSizes?.length===groupCount?groupSizes:Array.from({length:groupCount},(_,index)=>Math.floor(teamCount/groupCount)+(index<teamCount%groupCount?1:0));
+    return sizes.reduce((total,size)=>total+size*(size-1)/2,0)+groupCount*qualifiersPerGroup-1;
+  }
+  return format==='ROUND_ROBIN_DOUBLE'?teamCount*(teamCount-1):format==='SINGLE_ELIMINATION'?teamCount-1:teamCount*(teamCount-1)/2;
+}
 
-export function assessSchedule(rules:BasketballRules,format:string,teamCount:number):{ok:boolean;message:string;games:number;slots:number;dates:number}{
+export function assessSchedule(rules:BasketballRules,format:string,teamCount:number,groupCount=2,qualifiersPerGroup=2,groupSizes?:number[]):{ok:boolean;message:string;games:number;slots:number;dates:number}{
   if(!rules.scheduleStartDate||!rules.scheduleEndDate)return {ok:false,message:'Choose both a schedule start date and end date.',games:0,slots:0,dates:0};
   if(rules.scheduleEndDate<rules.scheduleStartDate)return {ok:false,message:'The end date must be on or after the start date.',games:0,slots:0,dates:0};
   if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(rules.firstGameTime))return {ok:false,message:'Choose a valid first game time.',games:0,slots:0,dates:0};
@@ -78,7 +84,7 @@ export function assessSchedule(rules:BasketballRules,format:string,teamCount:num
   if(!Number.isInteger(rules.estimatedGameDurationMinutes)||rules.estimatedGameDurationMinutes<60||rules.estimatedGameDurationMinutes>300)return {ok:false,message:'Estimated game duration must be from 60 to 300 minutes.',games:0,slots:0,dates:0};
   if(!Number.isInteger(rules.minutesBetweenGames)||rules.minutesBetweenGames<15||rules.minutesBetweenGames>360)return {ok:false,message:'Game interval must be between 15 and 360 minutes.',games:0,slots:0,dates:0};
   const dates=getEligibleScheduleDates(rules);if(!dates.length)return {ok:false,message:'No eligible game dates match the selected days and frequency.',games:0,slots:0,dates:0};
-  const games=requiredGames(teamCount,format);const [firstHour,firstMinute]=rules.firstGameTime.split(':').map(Number);const firstMinutes=firstHour*60+firstMinute;const spacing=rules.estimatedGameDurationMinutes+rules.minutesBetweenGames;const dayCapacity=Math.floor((24*60-firstMinutes-rules.estimatedGameDurationMinutes)/spacing)+1;const gamesPerDay=Math.min(rules.maxGamesPerDay,Math.floor(teamCount/2),dayCapacity);const slots=dates.length*Math.max(0,gamesPerDay);
+  const normalizedGroupSizes=groupSizes?.length===groupCount?groupSizes:Array.from({length:groupCount},(_,index)=>Math.floor(teamCount/groupCount)+(index<teamCount%groupCount?1:0));const maxParallelGames=format==='GROUP_BRACKET'?normalizedGroupSizes.reduce((total,size)=>total+Math.floor(size/2),0):Math.floor(teamCount/2);const games=requiredGames(teamCount,format,groupCount,qualifiersPerGroup,normalizedGroupSizes);const [firstHour,firstMinute]=rules.firstGameTime.split(':').map(Number);const firstMinutes=firstHour*60+firstMinute;const spacing=rules.estimatedGameDurationMinutes+rules.minutesBetweenGames;const dayCapacity=Math.floor((24*60-firstMinutes-rules.estimatedGameDurationMinutes)/spacing)+1;const gamesPerDay=Math.min(rules.maxGamesPerDay,maxParallelGames,dayCapacity);const slots=dates.length*Math.max(0,gamesPerDay);
   if(dayCapacity<1)return {ok:false,message:'The first tip-off and estimated game duration push the game past midnight. Choose an earlier tip-off or shorter estimated duration.',games,slots,dates:dates.length};
   if(slots<games)return {ok:false,message:`This schedule fits ${slots} games across ${dates.length} eligible dates, but ${games} games are required for ${teamCount} teams. Extend the date range, allow more days, increase the daily limit, or reduce the team limit.`,games,slots,dates:dates.length};
   return {ok:true,message:`Fits ${games} games across ${dates.length} eligible dates (${gamesPerDay} per day maximum).`,games,slots,dates:dates.length};
